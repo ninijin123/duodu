@@ -1005,7 +1005,7 @@ const FLOW={running:{}, saveT:null,
   to(bk){return (S.settings.mtTo&&S.settings.mtTo!==bk.la)?S.settings.mtTo:(bk.la==="zh"?"en":"zh")},
   saveSoon(bk){clearTimeout(this.saveT);this.saveT=setTimeout(()=>DB.put(bk),700)},
   here(bk,ch){return view.name==="reader"&&view.book===bk&&view.ch===ch},
-  lines(text){return text.split("\n").map(l=>l.match(/^\s*(MCZ|MC|QZ|Q|AZ|ANS|A|O|EXP|FOCUSZ|FOCUS|R|EN|ZH|MISS)\s*[|｜:：]\s*(.*)$/)).filter(Boolean).map(m=>[m[1],m[2].trim()])},
+  lines(text){return text.split("\n").map(l=>l.match(/^\s*(MCZ|MC|QZ|Q|AZ|ANS|A|O|EXP|FOCUSZ|FOCUS|RZ|R|EN|ZH|MISS)\s*[|｜:：]\s*(.*)$/)).filter(Boolean).map(m=>[m[1],m[2].trim()])},
   letter(x){const i="ABCD".indexOf(String(x).trim().charAt(0).toUpperCase());return i<0?0:i},
   mcLevel(){const l=S.settings.qLevel||"easy";
     return l==="easy"?"Make them EASY: ask about clear, important facts of the chapter (what happens, who does what, where, why in simple terms). Use simple, everyday words in the question and options. Wrong options should be clearly wrong to anyone who read the chapter."
@@ -1020,17 +1020,19 @@ const FLOW={running:{}, saveT:null,
     const sys=`You prepare a reader for the next chapter of a book. Output only these lines:
 FOCUS|one question in ${from} to keep in mind while reading THIS chapter (about meaning, a character, or a theme; do not give away what happens)
 FOCUSZ|the same question in ${to}${prev?`
-Then 3 multiple-choice questions in ${to} about important events or ideas of the PREVIOUS chapter. ${this.mcLevel()} Each as:
-R|question
-O|option (exactly 4 lines)
+Then 3 multiple-choice questions in ${from} about important events or ideas of the PREVIOUS chapter. ${this.mcLevel()} Each as:
+R|question in ${from}
+RZ|the same question in ${to}
+O|option in ${from}, without any letter prefix (exactly 4 lines)
 ANS|correct letter A-D
-EXP|one short sentence explaining the answer`:""}`;
+EXP|one short sentence in ${to} explaining the answer`:""}`;
     try{
       const text=await llm([{role:"system",content:sys},{role:"user",content:(prev?"PREVIOUS CHAPTER:\n"+prev.a.slice(0,12000)+"\n\n":"")+"THIS CHAPTER:\n"+c.a.slice(0,15000)}],1500,.7);
       const p={focus:"",focusZ:"",recall:[]}; let cur=null;
       this.lines(text).forEach(([k,v])=>{
         if(k==="FOCUS")p.focus=v; else if(k==="FOCUSZ")p.focusZ=v;
-        else if(k==="R"){cur={q:v,opts:[],ans:0,exp:""};p.recall.push(cur)}
+        else if(k==="R"){cur={q:v,qz:"",opts:[],ans:0,exp:""};p.recall.push(cur)}
+        else if(cur&&k==="RZ")cur.qz=v;
         else if(cur&&k==="O")cur.opts.push(v); else if(cur&&k==="ANS")cur.ans=this.letter(v); else if(cur&&k==="EXP")cur.exp=v;});
       if(!p.focus) throw new Error("没有拿到结果，请重试");
       p.recall=p.recall.filter(r=>r.opts.length>=2);
@@ -1041,7 +1043,7 @@ EXP|one short sentence explaining the answer`:""}`;
   mcHTML(prefix,items,sel){
     return items.map((it,i)=>{const s=(sel||{})[i];
       return `<div class="qcard"><span class="qn">选择题 ${i+1}</span><div class="qe">${esc(it.q)}</div>${it.qz?`<div class="qz">${esc(it.qz)}</div>`:""}
-      <div class="opts">${it.opts.map((o,oi)=>`<button class="opt ${s!=null?(oi===it.ans?"right":oi===s?"wrong":""):""}" data-mc="${prefix}:${i}:${oi}" ${s!=null?"disabled":""}>${"ABCD"[oi]}. ${esc(o.replace(/^[A-D][.、)]\s*/,""))}</button>`).join("")}</div>
+      <div class="opts">${it.opts.map((o,oi)=>`<button class="opt ${s!=null?(oi===it.ans?"right":oi===s?"wrong":""):""}" data-mc="${prefix}:${i}:${oi}" ${s!=null?"disabled":""}>${"ABCD"[oi]}. ${esc(o.replace(/^\(?[A-Da-d]\s*[.、)|｜:：）]\s*/,""))}</button>`).join("")}</div>
       ${s!=null?`<div class="ref">${s===it.ans?"答对了。":`正确答案是 ${"ABCD"[it.ans]}。`}${it.exp?" "+esc(it.exp):""}</div>`:""}</div>`}).join("");
   },
   prepHTML(b,ch){
@@ -1053,6 +1055,7 @@ EXP|one short sentence explaining the answer`:""}`;
     const p=c.prep;
     return `<div class="prep">
       ${p.recall.length?`<div id="st-recall" class="prep"><div class="note"><b>读前 · 回顾上一章</b>：不要翻回去看，凭记忆选。</div>${this.mcHTML("r",p.recall,c.recallSel)}</div>`:""}
+      <div style="text-align:right;margin-top:-4px"><button class="linkbtn" id="prepRe">换一组读前问题</button></div>
       <div class="qcard" id="st-focus"><span class="qn">带着这个问题读</span><div class="qe">${esc(p.focus)}</div>${p.focusZ?`<div class="qz">${esc(p.focusZ)}</div>`:""}</div>
     </div>`;
   },
@@ -1128,7 +1131,7 @@ Output only these lines.
 Each multiple-choice question:
 MC|question in ${from}
 MCZ|question in ${to}
-O|option in ${from} (exactly 4 lines)
+O|option in ${from}, without any letter prefix (exactly 4 lines)
 ANS|correct letter A-D
 EXP|why, in ${to}, 1–2 sentences
 Each open question:
@@ -1189,6 +1192,7 @@ MISS|${mine?`in ${to}, compare with the learner's own summary below and name 1�
       x.onblur=()=>{const f=x.dataset.f;if((f==="mid"||f==="quoteWhy")&&x.value.trim()){const fl=app.querySelector(".flow");if(fl)fl.outerHTML=this.flowHTML(b,ch),this.wireFlow()}}});
     this.wireFlow();
     if(g("prepGo")) g("prepGo").onclick=()=>this.genPrep(b,ch);
+    if(g("prepRe")) g("prepRe").onclick=()=>{c.prep=null;c.recallSel={};this.genPrep(b,ch)};
     app.querySelectorAll("[data-mc]").forEach(x=>x.onclick=e=>{e.stopPropagation();const [p,i,oi]=x.dataset.mc.split(":");
       if(p==="r"){c.recallSel=c.recallSel||{};if(c.recallSel[i]!=null)return;c.recallSel[i]=+oi}
       else{c.mcSel=c.mcSel||{};if(c.mcSel[i]!=null)return;c.mcSel[i]=+oi}
