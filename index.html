@@ -1705,7 +1705,8 @@ function renderSheet(){
       <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><button class="btn" id="mtTest">测试翻译</button><span class="note" id="mtRes"></span></div>
       <h3 class="sec">多设备同步</h3>
       ${SYNC.code()?`<div class="note">在手机、iPad、电脑上输入<b>同一个同步码</b>，书、生词、进度和笔记会自动同步。同步码相当于密码，不要发给别人。</div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><code id="syncCode" style="font-size:18px;letter-spacing:.08em;padding:8px 12px;border-radius:10px;background:var(--paper);border:1px solid var(--line);user-select:all">${esc(SYNC.code())}</code><button class="btn" id="syncCopy">${ic("copy")}复制</button></div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><code id="syncCode" style="font-size:18px;letter-spacing:.08em;padding:8px 12px;border-radius:10px;background:var(--paper);border:1px solid var(--line);user-select:all">${esc(SYNC.code())}</code><button class="btn" id="syncCopy">${ic("copy")}复制</button><button class="btn primary" id="syncLink">${ic("copy")}复制加入链接</button></div>
+        <div class="note">把“加入链接”用微信或隔空投送发到另一台设备，在那台设备上点开，就会自动加入同步，不用手动输入。</div>
         <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn primary" id="syncNow">立即同步</button><span class="note" data-sync-stat>${esc(SYNC.status())}</span><span class="spacer"></span><button class="btn" id="syncOff">在这台设备关闭同步</button></div>`
       :`<div class="note">在第一台设备上点“开启同步”，会生成一个同步码；在其他设备上输入这个同步码，就能同步书、生词、进度和笔记。</div>
         <div><button class="btn primary" id="syncNew">在这台设备开启同步</button></div>
@@ -1742,6 +1743,8 @@ function renderSheet(){
     if(sq("syncNew")) sq("syncNew").onclick=()=>{SYNC.setCode(SYNC.newCode());S.settingsU=Date.now();save();renderSheet();SYNC.run()};
     if(sq("syncJoin")) sq("syncJoin").onclick=()=>{const c=SYNC.norm(sq("syncIn").value);if(c.replace(/-/g,"").length<16){toast("同步码不完整，应该是 16 个字母和数字");return}SYNC.setCode(c);renderSheet();SYNC.run().then(()=>{if(view.sheet&&view.sheet.type==="settings")renderSheet()})};
     if(sq("syncNow")) sq("syncNow").onclick=()=>SYNC.run();
+    if(sq("syncLink")) sq("syncLink").onclick=()=>{const link=location.origin+location.pathname.replace(/index\.html$/,"")+"#join-"+SYNC.code().replace(/-/g,"");
+      navigator.clipboard.writeText(link).then(()=>toast("已复制加入链接，发到其他设备上点开即可")).catch(()=>toast(link))};
     if(sq("syncCopy")) sq("syncCopy").onclick=()=>navigator.clipboard.writeText(SYNC.code()).then(()=>toast("已复制同步码")).catch(()=>toast("请长按同步码复制"));
     if(sq("syncOff")) sq("syncOff").onclick=()=>{SYNC.setCode("");renderSheet();toast("这台设备已关闭同步，数据还在本机")};
     el.querySelector("#newGoal").onchange=e=>{S.settings.newGoal=+e.target.value;save()};
@@ -1903,6 +1906,9 @@ if(synth){synth.getVoices(); synth.onvoiceschanged=()=>{if(view.sheet&&view.shee
   if(S.progress){for(const k in S.progress) if(!S.pos[k]) S.pos[k]={ch:0,i:S.progress[k],t:Date.now()}; delete S.progress}
   S.books=[]; save();
   try{navigator.storage&&navigator.storage.persist&&navigator.storage.persist()}catch(e){}
+  const jm=(location.hash||"").match(/^#join-([A-Za-z0-9-]{12,40})$/);
+  if(jm){const c=SYNC.norm(jm[1]); try{history.replaceState(null,"",location.pathname)}catch(e){location.hash=""}
+    if(SYNC.code()!==c){SYNC.setCode(c); toast("已加入同步，正在下载你的书和生词…")}}
   render();
   if(SYNC.code()) SYNC.run();
 })();
