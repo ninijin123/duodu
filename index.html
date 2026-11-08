@@ -20,18 +20,19 @@ body{margin:0;font-size:14px}
 img{max-width:100%}
 /* Layout: library of book "spines" → reader with sentence-aligned rows (two columns on iPad, stacked on phone), floating action bar for the active pair */
 :root{
-  --paper:#EDF1EC; --surface:#F8FAF6; --ink:#1D2927; --ink-soft:#5A6A66; --line:#D3DCD5;
+  --paper:#EEF1EE; --surface:#FCFDFC; --ink:#141817; --ink-soft:#56635F; --line:#D3DCD5; --tr:#262B2A;
   --jade:#2C7765; --jade-wash:#DCEAE3; --hl:#F4E6BC; --danger:#A6473B; --mark:rgba(255,206,40,.45);
   --f-read:"Iowan Old Style","Charter",Georgia,"Songti SC",serif;
-  --f-zh:"Songti SC","STSong","Noto Serif CJK SC",serif;
+  --f-zh:"PingFang SC","Hiragino Sans GB","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
+  --f-zhserif:"Songti SC","STSong","Noto Serif CJK SC",serif;
   --f-ui:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",Arial,sans-serif;
   --fs:20px;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --paper:#111715; --surface:#19211E; --ink:#E2E9E4; --ink-soft:#93A39D; --line:#2B3732;
+  --paper:#111715; --surface:#19211E; --ink:#ECF1EE; --ink-soft:#9AA9A4; --tr:#DCE3DF; --line:#2B3732;
   --jade:#6CC2AA; --jade-wash:#1E332D; --hl:#463C1D; --danger:#E08A7C; --mark:rgba(255,200,40,.32); color-scheme:dark}}
 :root[data-theme="dark"]{
-  --paper:#111715; --surface:#19211E; --ink:#E2E9E4; --ink-soft:#93A39D; --line:#2B3732;
+  --paper:#111715; --surface:#19211E; --ink:#ECF1EE; --ink-soft:#9AA9A4; --tr:#DCE3DF; --line:#2B3732;
   --jade:#6CC2AA; --jade-wash:#1E332D; --hl:#463C1D; --danger:#E08A7C; --mark:rgba(255,200,40,.32); color-scheme:dark}
 html,body{height:100%}
 body{background:var(--paper);color:var(--ink);font-family:var(--f-ui);-webkit-tap-highlight-color:transparent}
@@ -241,9 +242,14 @@ input[type=range]{accent-color:var(--jade);width:160px}
 .row{gap:0 48px;padding:8px 14px}
 .row.pbreak{margin-top:26px}
 .s{line-height:1.75}
-.reader:not(.mode-inter):not(.mode-hide) .s.b{font-size:calc(var(--fs)*.88);line-height:1.8}
-.s.b{color:var(--ink-soft)}
-.row.active .s.b{color:var(--ink)}
+.reader:not(.mode-inter):not(.mode-hide) .s.b{font-size:calc(var(--fs)*.92);line-height:1.8}
+.row,.colhead,.midcard,.qcard,.kwp,.mtbar,details.pre,.think,.duebar,.vitem,.pop{box-sizing:border-box}
+.s{color:var(--ink);text-align:justify;-webkit-hyphens:auto;hyphens:auto}
+.s.b{color:var(--tr)}
+.tr-light .s.b{color:var(--ink-soft)}
+.tr-light .row.active .s.b{color:var(--ink)}
+.zh-serif .s.zh{font-family:var(--f-zhserif)}
+.s.zh{letter-spacing:.01em}
 .colhead{padding:0 14px 12px;border-bottom:1px solid var(--line);margin-bottom:12px}
 .ch-title{margin:4px 0 20px 14px}
 .row.marked{box-shadow:none}
@@ -591,7 +597,10 @@ async function callDirect(sentences,context,from,to){
   return out;
 }
 async function callMT(sentences,context,from,to){
-  if(S.settings.mtKey&&S.settings.mtKey.trim()) return callDirect(sentences,context,from,to);
+  {const text=await llm(mtPrompt(sentences,context,LANGS[from].name,LANGS[to].name,S.settings.glossary||""),6000,1.3);
+   const out=new Array(sentences.length).fill("");
+   text.split("\n").forEach(line=>{const m=line.match(/^\s*(\d+)\s*[|｜]\s*(.*)$/);if(m){const n=+m[1]-1;if(n>=0&&n<out.length)out[n]=m[2].trim()}});
+   return out}
   let r;
   try{r=await fetch("/api/translate",{method:"POST",headers:{"content-type":"application/json","x-passcode":S.settings.mtPass||""},
     body:JSON.stringify({sentences,context,from:LANGS[from].name,to:LANGS[to].name,glossary:S.settings.glossary||""})})}
@@ -655,6 +664,10 @@ function renderLib(){
   <main class="lib wrap">
     <h1>逐句对照，慢慢读懂</h1>
     <p class="sub">导入原著和译本（EPUB 或 TXT），自动按章、按段、按句对齐。${SYNC.code()?` <span class="tag" data-sync-stat>${esc(SYNC.status())}</span>`:""}</p>
+    ${(()=>{let best=null;allBooks().forEach(b=>{const p=S.pos[b.id];if(p&&p.i>=0&&(!best||(p.t||0)>(best.p.t||0)))best={b,p}});
+      if(!best) return "";
+      const when=best.p.t?(()=>{const d=new Date(best.p.t),n=new Date();const same=d.toDateString()===n.toDateString();return (same?"今天 ":`${d.getMonth()+1}月${d.getDate()}日 `)+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0")})():"";
+      return `<div class="duebar" style="background:var(--surface);border:1px solid var(--line)"><span>继续阅读：<b>${esc(best.b.title)}</b>${best.b.chapters.length>1?` · ${esc(chName(best.b,best.p.ch))}`:""}<span class="note">${when?" · "+when:""}</span></span><button class="btn primary" id="contRead" data-book="${esc(best.b.id)}">接着读</button></div>`})()}
     ${S.vocab.length?(()=>{const p=SB.plan(), n=p.review.length+p.fresh.length, st=SB.streak();
       return `<div class="duebar"><span>${n?`今日学习：新词 <b>${p.fresh.length}</b> · 复习 <b>${p.review.length}</b>`:"今天的单词任务完成了"}${st?` · 连续 <b>${st}</b> 天`:""}</span>${n?`<button class="btn primary" id="goRv">开始学习</button>`:""}<button class="btn" id="goDiary">${ic("pen")}今日小日记${(S.diary||[]).some(d=>d.date===FLOW.dayKey())?" ✓":""}</button></div>`})():""}
     <div class="shelf">
@@ -677,7 +690,7 @@ function renderLib(){
         </button>`}).join("")}
       <button class="book add" id="addTile">${ic("plus")}导入一本书<span style="font-size:13px;color:var(--ink-soft);font-weight:400">例如《1984》原文 + 译本</span></button>
     </div>
-    <div class="hint"><b>安装到 iPad：</b>用 Safari 打开本站 → 点“分享” → “添加到主屏幕”。第一次打开后没网也能用。<br>想在手机、iPad、电脑上一起用：打开一本书 → “A”阅读设置 → 多设备同步，每台设备输入同一个同步码。</div>
+    <div class="hint"><b>安装到 iPad：</b>用 Safari 打开本站 → 点“分享” → “添加到主屏幕”。第一次打开后没网也能用。<br>手机、iPad、电脑打开这个网站会自动同步，书和生词保持一致。</div>
   </main>`;
   app.querySelectorAll("[data-open]").forEach(el=>el.onclick=e=>{
     const del=e.target.closest("[data-del]");
@@ -688,6 +701,7 @@ function renderLib(){
   document.getElementById("openVocab").onclick=()=>openSheet("vocab");
   const gr=document.getElementById("goRv"); if(gr) gr.onclick=startReview;
   const gd=document.getElementById("goDiary"); if(gd) gd.onclick=()=>openSheet("diary");
+  const cr=document.getElementById("contRead"); if(cr) cr.onclick=()=>openBook(cr.dataset.book);
 }
 
 function openBook(id,ch){
@@ -746,7 +760,7 @@ function renderReader(){
     <button class="ibtn" id="openVocab" title="生词本">${ic("star")}</button>
     ${b.sample?"":`<button class="ibtn" id="openNotes" title="读书笔记">${ic("note")}</button>`}
   </div></div>
-  <main class="reader wrap mode-${st.mode}">
+  <main class="reader wrap mode-${st.mode} ${st.trTone==="light"?"tr-light":""} ${st.zhFont==="serif"?"zh-serif":""}">
     ${nCh>1?`<h2 class="ch-title ${cjk(L)?"zh":""}">${esc(title)}</h2>`:""}
     ${flowHTML}
     ${(prepHTML||kwHTML)?`<details class="pre" id="preBox" ${FLOW.preOpen(b,ch)?"open":""}><summary>读前准备 <span class="note" style="font-weight:400">回顾 · 带着问题读 · 重点词</span></summary><div class="prebody">${prepHTML}${kwHTML}</div></details>`:""}
@@ -896,8 +910,18 @@ S.vocab.forEach(v=>{if(v.seen==null) v.seen=(v.stage||0)>0||v.kind==="idea"||!!v
 S.vocab.forEach(v=>{if(v.stage==null){v.stage=v.ok?2:0;v.due=v.ok?today0()+7*DAY:0;delete v.ok}});
 
 /* ---------- generic call to the translation model ---------- */
-function llmReady(){return !!(S.settings.mtKey&&S.settings.mtKey.trim())}
+function llmReady(){return true}
+const hasLocalKey=()=>!!(S.settings.mtKey&&S.settings.mtKey.trim());
 async function llm(messages,max_tokens,temperature){
+  if(!hasLocalKey()){
+    let r;
+    try{r=await fetch("/api/llm",{method:"POST",headers:{"content-type":"application/json","x-sync-code":(typeof SYNC!=="undefined"&&SYNC.code())||"none"},body:JSON.stringify({messages,max_tokens,temperature})})}
+    catch(e){throw new Error("连不上网络，联网后再试")}
+    let d=null; try{d=await r.json()}catch(e){}
+    if(r.status===404&&!d) throw new Error("网站的 AI 服务还没部署好");
+    if(!r.ok||!d||d.error) throw new Error((d&&d.error)||("AI 服务出错（"+r.status+"）"));
+    return d.content||"";
+  }
   const st=S.settings, base=(st.mtBase||"").trim().replace(/\/+$/,""), url=/\/chat\/completions$/.test(base)?base:base+"/chat/completions";
   let r;
   try{r=await fetch(url,{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+st.mtKey.trim()},
@@ -1495,11 +1519,13 @@ const SB={
    ========================================================= */
 var SYNC={busy:false,last:0,err:"",timer:null,muted:false,lastMeta:"",
   norm(c){const x=String(c||"").toUpperCase().replace(/[^A-Z0-9]/g,"");return x.length>=12?(x.match(/.{1,4}/g)||[]).join("-"):String(c||"").trim()},
-  code(){try{return this.norm(localStorage.getItem("duodu.sync")||"")}catch(e){return ""}},
+  DEFAULT:"RRDQ-4QF3-7XZA-2EFU",
+  code(){let v="";try{v=localStorage.getItem("duodu.sync")||""}catch(e){} if(v==="off") return ""; return this.norm(v||this.DEFAULT)},
+  isDefault(){let v="";try{v=localStorage.getItem("duodu.sync")||""}catch(e){} return !v},
   setCode(c){try{c?localStorage.setItem("duodu.sync",c):localStorage.removeItem("duodu.sync")}catch(e){}},
   newCode(){const A="ABCDEFGHJKMNPQRSTUVWXYZ23456789",r=crypto.getRandomValues(new Uint8Array(16));
     return [0,1,2,3].map(g=>[0,1,2,3].map(i=>A[r[g*4+i]%A.length]).join("")).join("-")},
-  dirty(){if(!this.code()||this.muted)return;clearTimeout(this.timer);this.timer=setTimeout(()=>this.run(),12000)},
+  dirty(){if(!this.code()||this.muted)return;clearTimeout(this.timer);this.timer=setTimeout(()=>this.run(),4000)},
   async api(method,q,body){
     let r; try{r=await fetch("/api/sync"+(q||""),{method,headers:{"x-sync-code":this.code(),"content-type":"application/json"},body})}
     catch(e){throw new Error("没有网络，联网后会自动同步")}
@@ -1507,11 +1533,11 @@ var SYNC={busy:false,last:0,err:"",timer:null,muted:false,lastMeta:"",
     if(!r.ok){let m="";try{m=(await r.json()).error}catch(e){}throw new Error(m||"同步出错（"+r.status+"）")}
     return r;
   },
-  metaOut(){return {settings:{...S.settings,voices:undefined},settingsU:S.settingsU||0,vocab:S.vocab,vocabDel:S.vocabDel||[],pos:S.pos,diary:S.diary||[],study:S.study||{days:[]},newDay:S.newDay||null,bookDel:S.bookDel||[]}},
+  metaOut(){return {settings:{...S.settings,voices:undefined,mtKey:undefined},settingsU:S.settingsU||0,vocab:S.vocab,vocabDel:S.vocabDel||[],pos:S.pos,diary:S.diary||[],study:S.study||{days:[]},newDay:S.newDay||null,bookDel:S.bookDel||[]}},
   mergeMeta(R){
     if(!R) return;
     const tu=v=>v.u||v.t||0;
-    if((R.settingsU||0)>(S.settingsU||0)&&R.settings){S.settings={...S.settings,...R.settings,voices:S.settings.voices||{}};S.settingsU=R.settingsU;
+    if((R.settingsU||0)>(S.settingsU||0)&&R.settings){S.settings={...S.settings,...R.settings,voices:S.settings.voices||{},mtKey:S.settings.mtKey||""};S.settingsU=R.settingsU;
       document.documentElement.style.setProperty("--fs",S.settings.fs+"px")}
     const del={}; [...(S.vocabDel||[]),...(R.vocabDel||[])].forEach(d=>{if(!del[d.id]||d.t>del[d.id])del[d.id]=d.t});
     S.vocabDel=Object.entries(del).map(([id,t])=>({id,t})).slice(-3000);
@@ -1568,6 +1594,7 @@ var SYNC={busy:false,last:0,err:"",timer:null,muted:false,lastMeta:"",
   paint(){document.querySelectorAll("[data-sync-stat]").forEach(x=>x.textContent=this.status())}
 };
 document.addEventListener("visibilitychange",()=>{if(SYNC.code()) SYNC.run()});
+window.addEventListener("pagehide",()=>{if(SYNC.code()) SYNC.run()});
 setInterval(()=>{if(SYNC.code()&&!document.hidden) SYNC.run()},120000);
 window.duoduSync=()=>SYNC.run();
 
@@ -1577,8 +1604,6 @@ function saveDict(){try{const k=Object.keys(DICT);if(k.length>3000)k.slice(0,k.l
 function closePop(){const p=document.getElementById("pop");p&&p.remove();document.querySelectorAll(".w.on").forEach(x=>x.classList.remove("on"))}
 async function defineWord(word,sentence,from,to){
   const st=S.settings;
-  if(!(st.mtKey&&st.mtKey.trim())) throw new Error("在“阅读设置”里填好 API Key 后，点单词就能看到意思");
-  const base=(st.mtBase||"").trim().replace(/\/+$/,""), url=/\/chat\/completions$/.test(base)?base:base+"/chat/completions";
   const toName=LANGS[to].name;
   const sys=`You are a concise dictionary for a language learner. Explain the word as it is used in the given sentence. Answer in ${toName}, exactly eight lines, nothing else:
 音标|IPA pronunciation, e.g. /ˈklɒk/
@@ -1589,12 +1614,7 @@ async function defineWord(word,sentence,from,to){
 例译|translation of that example sentence into ${toName}
 用法|exactly one of: 日常常用 / 书面正式 / 文学少见 (how often a native speaker would use this word in everyday life)
 搭配|2–3 common collocations with this word, separated by "; "`;
-  let r;
-  try{r=await fetch(url,{method:"POST",headers:{"content-type":"application/json",authorization:"Bearer "+st.mtKey.trim()},
-    body:JSON.stringify({model:(st.mtModel||"deepseek-chat").trim(),messages:[{role:"system",content:sys},{role:"user",content:`Word: ${word}\nLanguage: ${LANGS[from].name}\nSentence: ${sentence}`}],temperature:.5,max_tokens:450,stream:false})})}
-  catch(e){throw new Error("连不上翻译接口，检查网络")}
-  if(!r.ok) throw new Error(r.status===401?"API Key 无效":r.status===402?"余额不足":"查询失败（"+r.status+"）");
-  const d=await r.json(); const text=(d&&d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content)||"";
+  const text=await llm([{role:"system",content:sys},{role:"user",content:`Word: ${word}\nLanguage: ${LANGS[from].name}\nSentence: ${sentence}`}],450,.5);
   const o={};
   text.split("\n").forEach(l=>{const m=l.match(/^\s*(音标|词性|意思|原形|例句|例译|用法|搭配)\s*[|｜:：]\s*(.*)$/);if(m)o[m[1]]=m[2].trim()});
   if(!o["意思"]) o["意思"]=text.trim().slice(0,60);
@@ -1695,7 +1715,7 @@ function renderSheet(){
       <label class="row-f"><span>连续朗读时，每句后也读译文</span><input type="checkbox" id="autoB" ${st.autoB?"checked":""}></label>
       <h3 class="sec">自动翻译（DeepSeek）</h3>
       <label class="f">接口地址<input type="text" id="mtBase" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(st.mtBase||"")}"></label>
-      <label class="f">API Key（只保存在这台设备上）<input type="password" id="mtKey" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-..." value="${esc(st.mtKey||"")}"></label>
+      <label class="f">API Key（建议留空：留空时使用网站服务器上的密钥，更安全）<input type="password" id="mtKey" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-..." value="${esc(st.mtKey||"")}"></label>
       <label class="f">模型名称<input type="text" id="mtModel" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(st.mtModel||"")}"></label>
       <label class="f">没有译文时翻译成<select id="mtTo">${["zh","ru","en"].map(k=>`<option value="${k}" ${k===st.mtTo?"selected":""}>${LANGS[k].name}</option>`).join("")}</select></label>
       <label class="row-f"><span>打开没有译文的章节时自动翻译</span><input type="checkbox" id="mtAuto" ${st.mtAuto?"checked":""}></label>
@@ -1704,13 +1724,17 @@ function renderSheet(){
       <label class="f">我的生活场景（用来生成贴近你生活的例句，比如：在杭州读书，周末做兼职，喜欢健身和拍视频）<textarea id="life" style="min-height:70px;font-family:var(--f-ui);font-size:14px">${esc(st.life||"")}</textarea></label>
       <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap"><button class="btn" id="mtTest">测试翻译</button><span class="note" id="mtRes"></span></div>
       <h3 class="sec">多设备同步</h3>
-      ${SYNC.code()?`<div class="note">在手机、iPad、电脑上输入<b>同一个同步码</b>，书、生词、进度和笔记会自动同步。同步码相当于密码，不要发给别人。</div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><code id="syncCode" style="font-size:18px;letter-spacing:.08em;padding:8px 12px;border-radius:10px;background:var(--paper);border:1px solid var(--line);user-select:all">${esc(SYNC.code())}</code><button class="btn" id="syncCopy">${ic("copy")}复制</button><button class="btn primary" id="syncLink">${ic("copy")}复制加入链接</button></div>
-        <div class="note">把“加入链接”用微信或隔空投送发到另一台设备，在那台设备上点开，就会自动加入同步，不用手动输入。</div>
-        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn primary" id="syncNow">立即同步</button><span class="note" data-sync-stat>${esc(SYNC.status())}</span><span class="spacer"></span><button class="btn" id="syncOff">在这台设备关闭同步</button></div>`
-      :`<div class="note">在第一台设备上点“开启同步”，会生成一个同步码；在其他设备上输入这个同步码，就能同步书、生词、进度和笔记。</div>
-        <div><button class="btn primary" id="syncNew">在这台设备开启同步</button></div>
-        <label class="f">已经在别的设备开启了？输入同步码<div style="display:flex;gap:8px"><input type="text" id="syncIn" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="XXXX-XXXX-XXXX-XXXX" style="flex:1;min-width:0"><button class="btn" id="syncJoin">加入</button></div></label>`}
+      ${SYNC.code()?`<div class="note">已开启自动同步。电脑、手机、iPad 打开这个网站，书、生词、进度和笔记会自动保持一致，不用任何设置。</div>
+        <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="btn primary" id="syncNow">立即同步</button><span class="note" data-sync-stat>${esc(SYNC.status())}</span></div>
+        <details><summary class="note" style="cursor:pointer">高级：使用私人同步码</summary><div style="display:flex;flex-direction:column;gap:8px;margin-top:8px">
+          <div class="note">当前同步码：<code>${esc(SYNC.code())}</code>${SYNC.isDefault()?"（网站内置）":"（私人）"}。换成私人同步码后，只有输入了同一个码的设备能看到你的数据。</div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn" id="syncNew">生成私人同步码</button>${SYNC.isDefault()?"":`<button class="btn" id="syncDef">换回内置同步码</button>`}<button class="btn" id="syncOff">关闭这台设备的同步</button></div>
+          <div style="display:flex;gap:8px"><input type="text" id="syncIn" autocomplete="off" autocapitalize="characters" spellcheck="false" placeholder="输入其他同步码" style="flex:1;min-width:0"><button class="btn" id="syncJoin">使用</button></div>
+        </div></details>`
+      :`<div class="note">这台设备的同步已关闭。</div><div><button class="btn primary" id="syncOn">重新开启自动同步</button></div>`}
+      <h3 class="sec">阅读显示</h3>
+      <div class="row-f"><span>译文颜色</span><div class="seg"><button data-trt="dark" class="${st.trTone!=="light"?"on":""}">深色</button><button data-trt="light" class="${st.trTone==="light"?"on":""}">浅色</button></div></div>
+      <div class="row-f"><span>中文字体</span><div class="seg"><button data-zhf="sans" class="${st.zhFont!=="serif"?"on":""}">黑体</button><button data-zhf="serif" class="${st.zhFont==="serif"?"on":""}">宋体</button></div></div>
       <h3 class="sec">背单词</h3>
       <div class="row-f"><span>每天学几个新词</span><select id="newGoal" style="width:auto">${[5,10,15,20,30].map(n=>`<option ${+(st.newGoal||10)===n?"selected":""}>${n}</option>`).join("")}</select></div>
       <label class="row-f"><span>看到单词时自动发音</span><input type="checkbox" id="autoSay" ${st.autoSay!==false?"checked":""}></label>
@@ -1741,12 +1765,16 @@ function renderSheet(){
     el.addEventListener("input",markSet); el.addEventListener("change",markSet);
     const sq=id=>el.querySelector("#"+id);
     if(sq("syncNew")) sq("syncNew").onclick=()=>{SYNC.setCode(SYNC.newCode());S.settingsU=Date.now();save();renderSheet();SYNC.run()};
+    if(sq("syncDef")) sq("syncDef").onclick=()=>{SYNC.setCode("");renderSheet();SYNC.run()};
+    if(sq("syncOn")) sq("syncOn").onclick=()=>{SYNC.setCode("");renderSheet();SYNC.run()};
     if(sq("syncJoin")) sq("syncJoin").onclick=()=>{const c=SYNC.norm(sq("syncIn").value);if(c.replace(/-/g,"").length<16){toast("同步码不完整，应该是 16 个字母和数字");return}SYNC.setCode(c);renderSheet();SYNC.run().then(()=>{if(view.sheet&&view.sheet.type==="settings")renderSheet()})};
     if(sq("syncNow")) sq("syncNow").onclick=()=>SYNC.run();
     if(sq("syncLink")) sq("syncLink").onclick=()=>{const link=location.origin+location.pathname.replace(/index\.html$/,"")+"#join-"+SYNC.code().replace(/-/g,"");
       navigator.clipboard.writeText(link).then(()=>toast("已复制加入链接，发到其他设备上点开即可")).catch(()=>toast(link))};
     if(sq("syncCopy")) sq("syncCopy").onclick=()=>navigator.clipboard.writeText(SYNC.code()).then(()=>toast("已复制同步码")).catch(()=>toast("请长按同步码复制"));
-    if(sq("syncOff")) sq("syncOff").onclick=()=>{SYNC.setCode("");renderSheet();toast("这台设备已关闭同步，数据还在本机")};
+    if(sq("syncOff")) sq("syncOff").onclick=()=>{SYNC.setCode("off");renderSheet();toast("这台设备已关闭同步，数据还在本机")};
+    el.querySelectorAll("[data-trt]").forEach(b=>b.onclick=()=>{S.settings.trTone=b.dataset.trt;S.settingsU=Date.now();save();renderSheet();if(view.name==="reader")keepScroll(render)});
+    el.querySelectorAll("[data-zhf]").forEach(b=>b.onclick=()=>{S.settings.zhFont=b.dataset.zhf;S.settingsU=Date.now();save();renderSheet();if(view.name==="reader")keepScroll(render)});
     el.querySelector("#newGoal").onchange=e=>{S.settings.newGoal=+e.target.value;save()};
     el.querySelector("#autoSay").onchange=e=>{S.settings.autoSay=e.target.checked;save()};
     el.querySelector("#mtTest").onclick=async()=>{const out=el.querySelector("#mtRes");out.textContent="测试中…";
