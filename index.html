@@ -20,9 +20,10 @@ body{margin:0;font-size:14px}
 img{max-width:100%}
 /* Layout: library of book "spines" → reader with sentence-aligned rows (two columns on iPad, stacked on phone), floating action bar for the active pair */
 :root{
-  --paper:#EEF1EE; --surface:#FCFDFC; --ink:#141817; --ink-soft:#56635F; --line:#D3DCD5; --tr:#262B2A;
+  --paper:#EEF1EE; --surface:#FCFDFC; --ink:#0B0E0D; --ink-soft:#4E5A56; --line:#D3DCD5; --tr:#141817;
   --jade:#2C7765; --jade-wash:#DCEAE3; --hl:#F4E6BC; --danger:#A6473B; --mark:rgba(255,206,40,.45);
-  --f-read:"Iowan Old Style","Charter",Georgia,"Songti SC",serif;
+  --f-read:ui-serif,"New York","Iowan Old Style","Charter",Georgia,"Songti SC",serif;
+  --rw:500;
   --f-zh:"PingFang SC","Hiragino Sans GB","Noto Sans CJK SC","Microsoft YaHei",sans-serif;
   --f-zhserif:"Songti SC","STSong","Noto Serif CJK SC",serif;
   --f-ui:-apple-system,BlinkMacSystemFont,"PingFang SC","Helvetica Neue",Arial,sans-serif;
@@ -244,7 +245,7 @@ input[type=range]{accent-color:var(--jade);width:160px}
 .s{line-height:1.75}
 .reader:not(.mode-inter):not(.mode-hide) .s.b{font-size:calc(var(--fs)*.92);line-height:1.8}
 .row,.colhead,.midcard,.qcard,.kwp,.mtbar,details.pre,.think,.duebar,.vitem,.pop{box-sizing:border-box}
-.s{color:var(--ink);text-align:justify;-webkit-hyphens:auto;hyphens:auto}
+.s{font-weight:var(--rw);-webkit-font-smoothing:antialiased;color:var(--ink);text-align:justify;-webkit-hyphens:auto;hyphens:auto}
 .s.b{color:var(--tr)}
 .tr-light .s.b{color:var(--ink-soft)}
 .tr-light .row.active .s.b{color:var(--ink)}
@@ -650,6 +651,7 @@ let view={name:"lib",book:null,ch:0,active:-1,sheet:null};
 let speaking=false, speakIdx=-1;
 const app=document.getElementById("app");
 document.documentElement.style.setProperty("--fs",S.settings.fs+"px");
+document.documentElement.style.setProperty("--rw",String(S.settings.rw||500));
 function toast(msg){const t=document.createElement("div");t.className="toast";t.textContent=msg;document.body.appendChild(t);setTimeout(()=>t.remove(),2200)}
 const chName=(bk,i)=>{const c=bk.chapters[i];return c.t||(bk.chapters.length>1?`第 ${i+1} 章`:"")};
 
@@ -1538,7 +1540,7 @@ var SYNC={busy:false,last:0,err:"",timer:null,muted:false,lastMeta:"",
     if(!R) return;
     const tu=v=>v.u||v.t||0;
     if((R.settingsU||0)>(S.settingsU||0)&&R.settings){S.settings={...S.settings,...R.settings,voices:S.settings.voices||{},mtKey:S.settings.mtKey||""};S.settingsU=R.settingsU;
-      document.documentElement.style.setProperty("--fs",S.settings.fs+"px")}
+      document.documentElement.style.setProperty("--fs",S.settings.fs+"px");document.documentElement.style.setProperty("--rw",String(S.settings.rw||500))}
     const del={}; [...(S.vocabDel||[]),...(R.vocabDel||[])].forEach(d=>{if(!del[d.id]||d.t>del[d.id])del[d.id]=d.t});
     S.vocabDel=Object.entries(del).map(([id,t])=>({id,t})).slice(-3000);
     const map={}; S.vocab.forEach(v=>map[v.id]=v);
@@ -1734,6 +1736,7 @@ function renderSheet(){
       :`<div class="note">这台设备的同步已关闭。</div><div><button class="btn primary" id="syncOn">重新开启自动同步</button></div>`}
       <h3 class="sec">阅读显示</h3>
       <div class="row-f"><span>译文颜色</span><div class="seg"><button data-trt="dark" class="${st.trTone!=="light"?"on":""}">深色</button><button data-trt="light" class="${st.trTone==="light"?"on":""}">浅色</button></div></div>
+      <div class="row-f"><span>字体粗细</span><div class="seg">${[[400,"标准"],[500,"中粗"],[600,"粗"]].map(([w,t])=>`<button data-rw="${w}" class="${(+st.rw||500)===w?"on":""}" style="font-weight:${w}">${t}</button>`).join("")}</div></div>
       <div class="row-f"><span>中文字体</span><div class="seg"><button data-zhf="sans" class="${st.zhFont!=="serif"?"on":""}">黑体</button><button data-zhf="serif" class="${st.zhFont==="serif"?"on":""}">宋体</button></div></div>
       <h3 class="sec">背单词</h3>
       <div class="row-f"><span>每天学几个新词</span><select id="newGoal" style="width:auto">${[5,10,15,20,30].map(n=>`<option ${+(st.newGoal||10)===n?"selected":""}>${n}</option>`).join("")}</select></div>
@@ -1774,6 +1777,7 @@ function renderSheet(){
     if(sq("syncCopy")) sq("syncCopy").onclick=()=>navigator.clipboard.writeText(SYNC.code()).then(()=>toast("已复制同步码")).catch(()=>toast("请长按同步码复制"));
     if(sq("syncOff")) sq("syncOff").onclick=()=>{SYNC.setCode("off");renderSheet();toast("这台设备已关闭同步，数据还在本机")};
     el.querySelectorAll("[data-trt]").forEach(b=>b.onclick=()=>{S.settings.trTone=b.dataset.trt;S.settingsU=Date.now();save();renderSheet();if(view.name==="reader")keepScroll(render)});
+    el.querySelectorAll("[data-rw]").forEach(b=>b.onclick=()=>{S.settings.rw=+b.dataset.rw;S.settingsU=Date.now();document.documentElement.style.setProperty("--rw",String(S.settings.rw));save();renderSheet()});
     el.querySelectorAll("[data-zhf]").forEach(b=>b.onclick=()=>{S.settings.zhFont=b.dataset.zhf;S.settingsU=Date.now();save();renderSheet();if(view.name==="reader")keepScroll(render)});
     el.querySelector("#newGoal").onchange=e=>{S.settings.newGoal=+e.target.value;save()};
     el.querySelector("#autoSay").onchange=e=>{S.settings.autoSay=e.target.checked;save()};
