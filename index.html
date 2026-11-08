@@ -677,7 +677,7 @@ function renderLib(){
         </button>`}).join("")}
       <button class="book add" id="addTile">${ic("plus")}导入一本书<span style="font-size:13px;color:var(--ink-soft);font-weight:400">例如《1984》原文 + 译本</span></button>
     </div>
-    <div class="hint"><b>安装到 iPad：</b>用 Safari 打开本站 → 点“分享” → “添加到主屏幕”。第一次打开后没网也能用。<br>书、进度和生词只保存在这台 iPad 上。请从桌面图标打开再导入书，Safari 里和桌面图标里的书架是分开的。</div>
+    <div class="hint"><b>安装到 iPad：</b>用 Safari 打开本站 → 点“分享” → “添加到主屏幕”。第一次打开后没网也能用。<br>想在手机、iPad、电脑上一起用：打开一本书 → “A”阅读设置 → 多设备同步，每台设备输入同一个同步码。</div>
   </main>`;
   app.querySelectorAll("[data-open]").forEach(el=>el.onclick=e=>{
     const del=e.target.closest("[data-del]");
@@ -1494,7 +1494,8 @@ const SB={
    Multi-device sync (Netlify function /api/sync + Netlify Blobs)
    ========================================================= */
 var SYNC={busy:false,last:0,err:"",timer:null,muted:false,lastMeta:"",
-  code(){try{return localStorage.getItem("duodu.sync")||""}catch(e){return ""}},
+  norm(c){const x=String(c||"").toUpperCase().replace(/[^A-Z0-9]/g,"");return x.length>=12?(x.match(/.{1,4}/g)||[]).join("-"):String(c||"").trim()},
+  code(){try{return this.norm(localStorage.getItem("duodu.sync")||"")}catch(e){return ""}},
   setCode(c){try{c?localStorage.setItem("duodu.sync",c):localStorage.removeItem("duodu.sync")}catch(e){}},
   newCode(){const A="ABCDEFGHJKMNPQRSTUVWXYZ23456789",r=crypto.getRandomValues(new Uint8Array(16));
     return [0,1,2,3].map(g=>[0,1,2,3].map(i=>A[r[g*4+i]%A.length]).join("")).join("-")},
@@ -1528,7 +1529,7 @@ var SYNC={busy:false,last:0,err:"",timer:null,muted:false,lastMeta:"",
   async run(){
     if(!this.code()||this.busy) return;
     this.busy=true; this.muted=true; this.err=""; this.paint();
-    let changedView=false;
+    let changedView=false; const before=JSON.stringify([S.vocab.length,USER.length]);
     try{
       const idx=await (await this.api("GET","")).json();
       this.mergeMeta(idx.meta); save();
@@ -1543,20 +1544,25 @@ var SYNC={busy:false,last:0,err:"",timer:null,muted:false,lastMeta:"",
             if(view.book&&view.book.id===id){view.book=bk} changedView=true}
         }
       }
-      for(const b of USER){const r=remote[b.id]; if(!r||r.deleted&&!(S.bookDel||[]).some(d=>d.id===b.id)||(!r.deleted&&(b.updated||0)>(r.updated||0))) await this.api("PUT","?book="+encodeURIComponent(b.id),JSON.stringify(b))}
+      const pushed=new Set();
+      for(const b of USER){const r=remote[b.id]; if(!r||r.deleted&&!(S.bookDel||[]).some(d=>d.id===b.id)||(!r.deleted&&(b.updated||0)>(r.updated||0))){await this.api("PUT","?book="+encodeURIComponent(b.id),JSON.stringify(b));pushed.add(b.id)}}
       for(const d of (S.bookDel||[])){const r=remote[d.id]; if(r&&!r.deleted&&r.updated<=d.t) await this.api("DELETE","?book="+encodeURIComponent(d.id))}
       const m=JSON.stringify(this.metaOut());
       if(m!==this.lastMeta){await this.api("PUT","",m);this.lastMeta=m}
       this.last=Date.now();
+      this.info={cloud:new Set([...Object.keys(remote).filter(k=>!remote[k].deleted),...pushed]).size,local:USER.length,words:S.vocab.length};
+      if(JSON.stringify([S.vocab.length,USER.length])!==before) changedView=true;
     }catch(e){this.err=e.message||String(e)}
     this.busy=false; this.muted=false; this.paint();
+    if(changedView&&view.sheet&&view.sheet.type==="settings") renderSheet();
     if(changedView&&!view.sheet){ if(view.name==="lib") renderLib(); else if(view.name==="reader"&&view.book&&USER.some(b=>b.id===view.book.id)) keepScroll(render); else {view={name:"lib",book:null,ch:0,active:-1,sheet:null};render()} }
   },
   status(){
     if(!this.code()) return "";
+    const inf=this.info?`（云端 ${this.info.cloud} 本书 · 本机 ${this.info.local} 本 · 生词 ${this.info.words} 个）`:"";
     if(this.busy) return "正在同步…";
     if(this.err) return "同步失败："+this.err;
-    if(this.last){const d=new Date(this.last);return `已同步 ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`}
+    if(this.last){const d=new Date(this.last);return `已同步 ${String(d.getHours()).padStart(2,"0")}:${String(d.getMinutes()).padStart(2,"0")}`+(view.sheet&&view.sheet.type==="settings"?inf:"")}
     return "等待同步";
   },
   paint(){document.querySelectorAll("[data-sync-stat]").forEach(x=>x.textContent=this.status())}
@@ -1660,7 +1666,7 @@ function lookup(){
 function shuffle(a){a=a.slice();for(let i=a.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[a[i],a[j]]=[a[j],a[i]]}return a}
 function startReview(){SB.start()}
 function openSheet(type){view.sheet={type};renderSheet()}
-function closeSheet(){view.sheet=null;const s=document.getElementById("sheet");s&&s.remove()}
+function closeSheet(){view.sheet=null;const s=document.getElementById("sheet");s&&s.remove();if(view.name==="lib")renderLib()}
 let IMP=null; // import working state
 function renderSheet(){
   let el=document.getElementById("sheet"); if(el) el.remove();
@@ -1734,7 +1740,7 @@ function renderSheet(){
     el.addEventListener("input",markSet); el.addEventListener("change",markSet);
     const sq=id=>el.querySelector("#"+id);
     if(sq("syncNew")) sq("syncNew").onclick=()=>{SYNC.setCode(SYNC.newCode());S.settingsU=Date.now();save();renderSheet();SYNC.run()};
-    if(sq("syncJoin")) sq("syncJoin").onclick=()=>{const c=sq("syncIn").value.trim().toUpperCase();if(c.length<12){toast("同步码不完整");return}SYNC.setCode(c);renderSheet();SYNC.run().then(()=>{if(view.sheet&&view.sheet.type==="settings")renderSheet()})};
+    if(sq("syncJoin")) sq("syncJoin").onclick=()=>{const c=SYNC.norm(sq("syncIn").value);if(c.replace(/-/g,"").length<16){toast("同步码不完整，应该是 16 个字母和数字");return}SYNC.setCode(c);renderSheet();SYNC.run().then(()=>{if(view.sheet&&view.sheet.type==="settings")renderSheet()})};
     if(sq("syncNow")) sq("syncNow").onclick=()=>SYNC.run();
     if(sq("syncCopy")) sq("syncCopy").onclick=()=>navigator.clipboard.writeText(SYNC.code()).then(()=>toast("已复制同步码")).catch(()=>toast("请长按同步码复制"));
     if(sq("syncOff")) sq("syncOff").onclick=()=>{SYNC.setCode("");renderSheet();toast("这台设备已关闭同步，数据还在本机")};
