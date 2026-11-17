@@ -277,6 +277,8 @@ input[type=range]{accent-color:var(--jade);width:160px}
 .row.marked .s.a{background:none}
 .hlx{background:var(--mark);border-radius:3px;padding:1px 0;-webkit-box-decoration-break:clone;box-decoration-break:clone}
 ::highlight(duodu){background-color:rgba(255,200,0,.42);color:inherit}
+::highlight(duodu-u){text-decoration:underline;text-decoration-color:#3FA58C;text-decoration-thickness:2px;text-underline-offset:3px;color:inherit}
+.ulic{font-weight:700;text-decoration:underline;font-size:15px;width:18px;display:inline-block;text-align:center}
 .mk{grid-column:1/-1;margin:8px 0 2px;padding:8px 12px;border-left:3px solid var(--jade);background:var(--surface);border-radius:0 8px 8px 0;font-size:14px;color:var(--ink);font-family:var(--f-ui);line-height:1.55}
 .mk::before{content:"批注  ";color:var(--jade);font-weight:600;font-size:12px;letter-spacing:.06em}
 .actions{flex-wrap:nowrap;overflow-x:auto;gap:2px;padding:4px;border-radius:14px;justify-content:flex-start;scrollbar-width:none;max-width:min(calc(100% - 32px),760px)}
@@ -762,7 +764,7 @@ function renderReader(){
   const cell=(txt,lang,cls,mark)=>`<div class="s ${cls} ${cjk(lang)?"zh":""}" lang="${lang?LANGS[lang].tts:""}">${mark?`<span class="hlx">${words(txt,lang)}</span>`:words(txt,lang)}</div>`;
   const title=chName(b,ch);
   const midIdx=(!b.sample&&pairs.length>=12)?Math.floor(pairs.length/2):-1;
-  const hlRows=new Set((chap.hls||[]).map(h=>h.i));
+  const hlRows=new Set((chap.hls||[]).filter(h=>h.k!=="u").map(h=>h.i));
   const midHTML=`<div class="midcard" id="st-mid"><b>停一下</b><span class="note">不往回看，用一句话说说到这里发生了什么？（中英文都可以）</span><textarea data-f="mid" placeholder="到这里……">${esc(chap.mid||"")}</textarea></div>`;
   app.innerHTML=`
   <div class="bar"><div class="bar-in wrap">
@@ -804,7 +806,7 @@ function renderReader(){
     </div>`:""}
   </main>
   <div class="actions" id="actbar" role="toolbar" aria-label="句子操作" ${view.active>=0?"":"hidden"}>
-    ${b.sample?"":`<button class="ibtn" id="markBtn">${ic("mark")}<span>划线</span></button><button class="ibtn" id="noteBtn">${ic("pen")}批注</button><span class="sep"></span>`}
+    ${b.sample?"":`<button class="ibtn" id="markBtn">${ic("mark")}<span>高亮</span></button><button class="ibtn" id="ulBtn"><span class="ulic">U</span><span>下划线</span></button><button class="ibtn" id="noteBtn">${ic("pen")}批注</button><span class="sep"></span>`}
     <button class="ibtn" id="sayA">${ic("speakA")}读${L?LANGS[L].short:""}</button>
     ${R?`<button class="ibtn" id="sayB">${ic("speakA")}读${LANGS[R].short}</button>`:""}
     <button class="ibtn" id="fromHere">${ic("play")}从这里读</button>
@@ -852,6 +854,7 @@ function renderReader(){
   if(g("saveSel")) g("saveSel").onclick=saveSelection;
   if(g("lookup")) g("lookup").onclick=lookup;
   if(g("markBtn")){g("markBtn").addEventListener("pointerdown",e=>e.preventDefault()); g("markBtn").onclick=()=>HL.markClick(b,ch)}
+  if(g("ulBtn")){g("ulBtn").addEventListener("pointerdown",e=>e.preventDefault()); g("ulBtn").onclick=()=>HL.ulClick(b,ch)}
   HL.apply(b,ch); HL.updateBar();
   if(g("noteBtn")) g("noteBtn").onclick=()=>{const si=HL.sel(); view.sheet={type:"note",i:si?si.i:view.active};renderSheet()};
   ["saveSel","lookup"].forEach(id=>{const x=g(id); if(x) x.addEventListener("pointerdown",e=>e.preventDefault())});
@@ -1313,7 +1316,7 @@ MISS|${mine?`in ${to}, compare with the learner's own summary below and name 1�
       if(c.prep&&c.prep.focus) parts.push(["带着的问题",c.prep.focus]);
       if((c.mid||"").trim()) parts.push(["读到一半",c.mid]);
       Object.keys(c.marks||{}).map(Number).sort((x,y)=>x-y).forEach(i=>parts.push(["划线",(pairsOf(b,ch)[i]||{}).a+(c.marks[i]?"\n→ "+c.marks[i]:"")]));
-      (c.hls||[]).slice().sort((x,y)=>x.i-y.i||x.start-y.start).forEach(h=>parts.push(["高亮",h.text]));
+      (c.hls||[]).slice().sort((x,y)=>x.i-y.i||x.start-y.start).forEach(h=>parts.push([h.k==="u"?"下划线":"高亮",h.text]));
       if((c.sum||"").trim()) parts.push(["我的总结",c.sum]);
       if(c.aiSum) parts.push(["AI 总结",c.aiSum.zh||c.aiSum.en]);
       if((c.quote||"").trim()) parts.push(["打动我的一句",c.quote+((c.quoteWhy||"").trim()?"\n→ "+c.quoteWhy:"")]);
@@ -1409,12 +1412,21 @@ const HL={
   markClick(b,ch){const c=b.chapters[ch], si=this.sel();
     if(si){c.hls=c.hls||[]; c.hls.push(si); window.getSelection().removeAllRanges(); DB.put(b); keepScroll(render); toast("已高亮"); return}
     const i=view.active; if(i<0) return; c.marks=c.marks||{};
-    const has=c.marks[i]!=null||(c.hls||[]).some(h=>h.i===i);
-    if(has){delete c.marks[i]; c.hls=(c.hls||[]).filter(h=>h.i!==i)} else c.marks[i]="";
+    const has=c.marks[i]!=null||(c.hls||[]).some(h=>h.i===i&&h.k!=="u");
+    if(has){delete c.marks[i]; c.hls=(c.hls||[]).filter(h=>h.i!==i||h.k==="u")} else c.marks[i]="";
+    DB.put(b); keepScroll(render)},
+  ulClick(b,ch){
+    const c=b.chapters[ch], si=this.sel();
+    if(si){si.k="u"; c.hls=c.hls||[]; c.hls.push(si); window.getSelection().removeAllRanges(); DB.put(b); keepScroll(render); toast("已加下划线"); return}
+    const i=view.active; if(i<0) return; c.hls=c.hls||[];
+    if(c.hls.some(h=>h.i===i&&h.k==="u")){c.hls=c.hls.filter(h=>h.i!==i||h.k!=="u")}
+    else{const cell=app.querySelector(`.row[data-i="${i}"] .s.${S.settings.swap?"b":"a"}`); if(!cell) return;
+      const t=cell.textContent||""; c.hls.push({i,which:"orig",start:0,end:t.length,text:t.trim(),k:"u"})}
     DB.put(b); keepScroll(render)},
   apply(b,ch){
     if(!(window.CSS&&CSS.highlights&&window.Highlight)) return;
-    const hl=new Highlight(), c=b.chapters[ch];
+    try{CSS.highlights.delete("duodu");CSS.highlights.delete("duodu-u")}catch(e){}
+    const hl=new Highlight(), hu=new Highlight(), c=b.chapters[ch];
     (c.hls||[]).forEach(h=>{
       const cls=(h.which==="orig")!==!!S.settings.swap?"a":"b";
       const cell=app.querySelector(`.row[data-i="${h.i}"] .s.${cls}`); if(!cell) return;
@@ -1423,16 +1435,19 @@ const HL={
         if(!sN&&h.start<=pos+L){sN=nd;sO=h.start-pos}
         if(sN&&h.end<=pos+L){eN=nd;eO=h.end-pos;break}
         pos+=L}
-      if(sN&&eN){const r=document.createRange(); try{r.setStart(sN,sO);r.setEnd(eN,eO);hl.add(r)}catch(e){}}
+      if(sN&&eN){const r=document.createRange(); try{r.setStart(sN,sO);r.setEnd(eN,eO);(h.k==="u"?hu:hl).add(r)}catch(e){}}
     });
-    CSS.highlights.set("duodu",hl);
+    if(hl.size) CSS.highlights.set("duodu",hl);
+    if(hu.size) CSS.highlights.set("duodu-u",hu);
   },
   updateBar(){
     const btn=document.getElementById("markBtn"); if(!btn||view.name!=="reader") return;
     const c=view.book.chapters[view.ch], si=this.sel(), i=view.active;
-    const has=i>=0&&((c.marks||{})[i]!=null||(c.hls||[]).some(h=>h.i===i));
-    btn.querySelector("span").textContent=si?"高亮所选":has?"取消划线":"划线";
+    const has=i>=0&&((c.marks||{})[i]!=null||(c.hls||[]).some(h=>h.i===i&&h.k!=="u"));
+    const hasU=i>=0&&(c.hls||[]).some(h=>h.i===i&&h.k==="u");
+    btn.querySelector("span").textContent=si?"高亮所选":has?"取消高亮":"高亮";
     btn.classList.toggle("hot",!!si);
+    const ub=document.getElementById("ulBtn"); if(ub){const sp=ub.querySelectorAll("span"); sp[sp.length-1].textContent=si?"下划所选":hasU?"取消下划线":"下划线"}
   }
 };
 document.addEventListener("selectionchange",()=>{
@@ -1784,8 +1799,15 @@ function saveSelection(){
   item.stage=0; item.due=0; S.vocab.unshift(item); save();
   toast(si?`已收藏「${item.text.slice(0,20)}」`:"已收藏整句（先长按选中单词可只收藏单词）");
 }
+const DICTS=[["youdao","有道词典"],["bing","必应词典"],["eudic","欧路词典"],["cambridge","剑桥词典"],["yandex","Yandex 翻译"]];
 function dictURL(text,lang){
-  const q=encodeURIComponent(text);
+  const q=encodeURIComponent(text), d=(S.settings&&S.settings.dict)||"youdao";
+  if(lang==="en"&&d!=="yandex"){
+    if(d==="bing") return `https://cn.bing.com/dict/search?q=${q}`;
+    if(d==="eudic") return `https://dict.eudic.net/dicts/en/${q}`;
+    if(d==="cambridge") return `https://dictionary.cambridge.org/search/english-chinese-simplified/direct/?q=${q}`;
+    return `https://dict.youdao.com/result?word=${q}&lang=en`;
+  }
   if(lang==="zh") return `https://bkrs.info/slovo.php?ch=${q}`;
   const other=lang==="ru"?"zh":"ru";
   return `https://translate.yandex.com/?source_lang=${lang}&target_lang=${other}&text=${q}`;
@@ -1858,6 +1880,7 @@ function renderSheet(){
       <label class="f">API Key（建议留空：留空时使用网站服务器上的密钥，更安全）<input type="password" id="mtKey" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="sk-..." value="${esc(st.mtKey||"")}"></label>
       <label class="f">模型名称<input type="text" id="mtModel" autocomplete="off" autocapitalize="off" spellcheck="false" value="${esc(st.mtModel||"")}"></label>
       <label class="f">没有译文时翻译成<select id="mtTo">${["zh","ru","en"].map(k=>`<option value="${k}" ${k===st.mtTo?"selected":""}>${LANGS[k].name}</option>`).join("")}</select></label>
+      <label class="f">英文单词的“查词典”用<select id="dictSel">${DICTS.map(([k,t])=>`<option value="${k}" ${(st.dict||"youdao")===k?"selected":""}>${t}</option>`).join("")}</select></label>
       <label class="row-f"><span>打开没有译文的章节时自动翻译</span><input type="checkbox" id="mtAuto" ${st.mtAuto?"checked":""}></label>
       <label class="f">术语表（每行一个“原文=译名”，保证人名、术语前后一致）<textarea id="gl" style="min-height:150px;font-family:var(--f-ui);font-size:14px">${esc(st.glossary||"")}</textarea></label>
       <label class="f">选择题难度<select id="qLevel">${[["easy","简单：考发生了什么，选项浅显"],["mid","标准：理解加简单推理"],["hard","有挑战：推理、语气、言外之意"]].map(([k,t])=>`<option value="${k}" ${(st.qLevel||"easy")===k?"selected":""}>${t}</option>`).join("")}</select></label>
@@ -1898,6 +1921,7 @@ function renderSheet(){
     el.querySelector("#mtKey").oninput=e=>{S.settings.mtKey=e.target.value.trim();save()};
     el.querySelector("#mtModel").oninput=e=>{S.settings.mtModel=e.target.value.trim();save()};
     el.querySelector("#mtTo").onchange=e=>{S.settings.mtTo=e.target.value;save()};
+    el.querySelector("#dictSel").onchange=e=>{S.settings.dict=e.target.value;save()};
     el.querySelector("#mtAuto").onchange=e=>{S.settings.mtAuto=e.target.checked;save()};
     el.querySelector("#gl").oninput=e=>{S.settings.glossary=e.target.value;save()};
     el.querySelector("#life").oninput=e=>{S.settings.life=e.target.value;save()};

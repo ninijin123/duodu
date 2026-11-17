@@ -2,4 +2,6 @@
 1. 打开 github.com/ninijin123/duodu → Add file → Upload files
 2. 把本文件夹里的 index.html、sw.js 和 netlify 文件夹一起拖进去(这个说明文件不用传)
 3. 点 Commit changes,只提交一次
-4. 部署完成后刷新,查一个没查过的词
+4. 部署完成后刷新(电脑 Cmd+Shift+R;iPad/手机从后台划掉再打开),查一个没查过的词
+
+本次更新:取消收藏、取消高亮、新增下划线、查词典可选有道/必应/欧路/剑桥、查词不再发 temperature
