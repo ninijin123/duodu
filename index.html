@@ -181,6 +181,18 @@ input[type=range]{accent-color:var(--jade);width:160px}
 .pop .pm{font-size:17px;line-height:1.5}
 .pop .pb{font-size:13px;color:var(--ink-soft)}
 .pop .pex{margin-top:4px;padding-top:8px;border-top:1px solid var(--line);font-family:var(--f-read);font-size:15px;line-height:1.5;display:flex;flex-direction:column;gap:2px}
+.pop .pimg{margin:0 0 4px;border-radius:10px;overflow:hidden;background:var(--jade-wash);max-height:150px}
+.pop .pimg img{display:block;width:100%;height:150px;object-fit:cover}
+.pop .lab,.vitem .lab{font-size:11px;font-weight:700;color:var(--jade);letter-spacing:.04em;margin-right:6px}
+.pphr{margin-top:2px;padding:6px 10px;border-left:3px solid var(--jade);background:var(--jade-wash);border-radius:0 8px 8px 0;font-size:14px;line-height:1.5;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 8px}
+.pphr b{font-family:var(--f-read)}
+.pcol{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:2px}
+.chip{display:inline-flex;align-items:baseline;gap:6px;padding:3px 10px;border-radius:99px;border:1px solid var(--jade);background:var(--jade-wash);font-size:13px;line-height:1.4}
+.chip b{font-family:var(--f-read);font-weight:600;color:var(--ink)}
+.chip i{font-style:normal;color:var(--ink-soft)}
+.vitem .vimg{width:100%;max-height:140px;object-fit:cover;border-radius:8px}
+.ibtn.on .icon,.kwi .ibtn.done .icon{fill:currentColor}
+.pop .pa .ibtn.on{color:var(--jade)}
 .pop .pa{display:flex;gap:4px;margin-top:4px;align-items:center;flex-wrap:wrap}
 .pop .pa .ibtn{height:36px;font-size:13px}
 .pop .pa a{color:var(--jade);font-size:13px;font-weight:500;text-decoration:none;margin-left:auto}
@@ -941,7 +953,7 @@ async function genKeys(bk,ch){
   KW.running[key]={err:""}; if(view.name==="reader"&&view.book===bk&&view.ch===ch) keepScroll(render);
   const sys=`You help a C1-level ${LANGS[bk.la].name} learner read a novel. From the chapter, choose the 20 words most worth learning: words uncommon for a C1 learner that recur in the chapter, are needed to understand it, or are key terms of the book. Exclude proper names and everyday words. Order them by importance.
 Output exactly one line per word and nothing else, in this form:
-word as it appears in the text|dictionary form|IPA|part of speech in ${toName}|meaning in this chapter in ${toName}, under 15 characters|exactly one of 日常常用 / 书面正式 / 文学少见|2–3 common collocations separated by ";"|one short sentence from the chapter containing the word, copied exactly`;
+word as it appears in the text|dictionary form|IPA|part of speech in ${toName}|meaning in this chapter in ${toName}, under 15 characters|exactly one of 日常常用 / 书面正式 / 文学少见|2–3 key collocations of the dictionary form, each as collocation=translation in ${toName}, separated by ";"|one short sentence from the chapter containing the word, copied exactly`;
   try{
     const text=await llm([{role:"system",content:sys},{role:"user",content:c.a.slice(0,30000)}],2500,.7);
     const keys=[];
@@ -1611,20 +1623,65 @@ function closePop(){const p=document.getElementById("pop");p&&p.remove();documen
 async function defineWord(word,sentence,from,to){
   const st=S.settings;
   const toName=LANGS[to].name;
-  const sys=`You are a concise dictionary for a language learner. Explain the word as it is used in the given sentence. Answer in ${toName}, exactly eight lines, nothing else:
-音标|IPA pronunciation, e.g. /ˈklɒk/
-词性|part of speech in ${toName}, short (e.g. 名词, 动词)
-意思|its meaning in this sentence, in ${toName}, under 20 characters
-原形|dictionary form of the word (same word if already base form)
-例句|one short, natural example sentence in ${LANGS[from].name} using the word with the same meaning (not the given sentence)${(S.settings.life||"").trim()?", set in the learner's own daily life: "+S.settings.life.trim().slice(0,200):""}
+  const sys=`You are a concise dictionary for a language learner. The learner tapped a word inside a sentence. The word may be an inflected form (past tense, plural, -ing, comparative...), but you must explain its DICTIONARY FORM (lemma), e.g. gilded -> gild (verb), children -> child (noun), better -> good. The headword, IPA and part of speech all refer to the dictionary form, never to the inflected form. Answer in ${toName}, exactly eleven lines, nothing else:
+原形|the dictionary form (lemma), always filled in, even if it equals the tapped word
+音标|IPA of the dictionary form, e.g. /ˈklɒk/
+词性|part of speech of the dictionary form in ${toName}, short (e.g. 名词, 动词)
+意思|meaning of the dictionary form as used in this sentence, in ${toName}, under 20 characters
+词形|how the tapped word relates to the dictionary form in ${toName}, e.g. "gild 的过去分词（被动用法）"; write 原形，无变化 if it is already the dictionary form
+短语|a phrase, idiom or fixed expression in the given sentence that contains the tapped word, in the form: phrase as in the sentence=translation in ${toName}. Write 无 if there is none
+搭配|the 2–3 most important collocations of the dictionary form, each as: collocation=translation in ${toName}, separated by "; "
+例句|one short, natural example sentence in ${LANGS[from].name} using the dictionary form with the same meaning (not the given sentence)${(S.settings.life||"").trim()?", set in the learner's own daily life: "+S.settings.life.trim().slice(0,200):""}
 例译|translation of that example sentence into ${toName}
 用法|exactly one of: 日常常用 / 书面正式 / 文学少见 (how often a native speaker would use this word in everyday life)
-搭配|2–3 common collocations with this word, separated by "; "`;
-  const text=await llm([{role:"system",content:sys},{role:"user",content:`Word: ${word}\nLanguage: ${LANGS[from].name}\nSentence: ${sentence}`}],450,.5);
+图片|one concrete English noun or Wikipedia article title that a photo could illustrate to explain this word's meaning (for a verb or adjective, a concrete object or scene that shows it, e.g. gild -> gilding). Write 无 if no picture can show it`;
+  const text=await llm([{role:"system",content:sys},{role:"user",content:`Tapped word: ${word}\nLanguage: ${LANGS[from].name}\nSentence: ${sentence}`}],900,.5);
   const o={};
-  text.split("\n").forEach(l=>{const m=l.match(/^\s*(音标|词性|意思|原形|例句|例译|用法|搭配)\s*[|｜:：]\s*(.*)$/);if(m)o[m[1]]=m[2].trim()});
+  text.split("\n").forEach(l=>{const m=l.match(/^\s*(原形|音标|词性|意思|词形|短语|搭配|例句|例译|用法|图片)\s*[|｜:：]\s*(.*)$/);if(m)o[m[1]]=m[2].trim()});
   if(!o["意思"]) o["意思"]=text.trim().slice(0,60);
-  return {ipa:o["音标"]||"",pos:o["词性"]||"",mean:o["意思"]||"",base:o["原形"]||"",ex:o["例句"]||"",exTr:o["例译"]||"",level:o["用法"]||"",col:o["搭配"]||""};
+  const none=s=>!s||/^(无|none|n\/a|-)$/i.test(s.trim())?"":s.trim();
+  return {ipa:o["音标"]||"",pos:o["词性"]||"",mean:o["意思"]||"",base:o["原形"]||"",form:o["词形"]||"",phr:none(o["短语"]),ex:o["例句"]||"",exTr:o["例译"]||"",level:o["用法"]||"",col:none(o["搭配"]),imgq:none(o["图片"])};
+}
+
+/* ---------- phrase / sentence translation (select text → 查词) ---------- */
+async function definePhrase(text,sentence,from,to){
+  const toName=LANGS[to].name;
+  const sys=`You are a concise dictionary for a language learner. The learner selected a phrase or passage inside a sentence. Explain it as it is used in the sentence. Answer in ${toName}, exactly four lines, nothing else:
+翻译|natural translation of the selected text into ${toName}
+说明|if it is an idiom, phrasal verb or fixed expression, say what it means and how it is used, in ${toName}, under 40 characters; otherwise write 无
+搭配|the key collocations or words inside the selected text worth remembering, each as: collocation=translation in ${toName}, separated by "; ". Write 无 if there are none
+原形|the dictionary form of the whole expression if it is a phrase (e.g. "look forward to"), otherwise 无`;
+  const t=await llm([{role:"system",content:sys},{role:"user",content:`Selected text: ${text}\nLanguage: ${LANGS[from].name}\nFull sentence: ${sentence}`}],500,.4);
+  const o={}; t.split("\n").forEach(l=>{const m=l.match(/^\s*(翻译|说明|搭配|原形)\s*[|｜:：]\s*(.*)$/);if(m)o[m[1]]=m[2].trim()});
+  const none=s=>!s||/^(无|none|n\/a|-)$/i.test(s.trim())?"":s.trim();
+  return {tr:o["翻译"]||t.trim().slice(0,120),note:none(o["说明"]),col:none(o["搭配"]),base:none(o["原形"])};
+}
+
+/* ---------- picture for a word (Wikipedia thumbnail, no API key) ---------- */
+let IMGC={}; try{IMGC=JSON.parse(localStorage.getItem("duodu.img")||"{}")}catch(e){}
+async function wordImage(q){
+  q=(q||"").trim(); if(!q) return "";
+  const k=q.toLowerCase(); if(k in IMGC) return IMGC[k];
+  let url="";
+  try{
+    const r=await fetch("https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrsearch="+encodeURIComponent(q)+"&gsrlimit=4&prop=pageimages&piprop=thumbnail&pithumbsize=480&format=json&origin=*");
+    const d=await r.json(), pages=Object.values((d.query&&d.query.pages)||{}).filter(p=>p.thumbnail&&p.thumbnail.source&&!/\.svg/i.test(p.thumbnail.source)).sort((a,b)=>a.index-b.index);
+    if(pages[0]) url=pages[0].thumbnail.source;
+  }catch(e){return ""}
+  IMGC[k]=url; try{const ks=Object.keys(IMGC); if(ks.length>400) ks.slice(0,ks.length-400).forEach(x=>delete IMGC[x]); localStorage.setItem("duodu.img",JSON.stringify(IMGC))}catch(e){}
+  return url;
+}
+
+/* "make a decision=做决定; take a risk=冒险" → highlighted chips (old "a; b" strings still work) */
+function colChips(col){
+  if(!col) return "";
+  return col.split(/\s*[;；]\s*/).filter(Boolean).map(c=>{const m=c.split(/\s*=\s*/);
+    return `<span class="chip"><b>${esc(m[0])}</b>${m[1]?`<i>${esc(m.slice(1).join("="))}</i>`:""}</span>`}).join("");
+}
+function phrBlock(phr){
+  if(!phr) return "";
+  const m=phr.split(/\s*=\s*/);
+  return `<div class="pphr"><span class="lab">短语</span><b>${esc(m[0])}</b>${m[1]?`<span>${esc(m.slice(1).join("="))}</span>`:""}</div>`;
 }
 function placePop(pop,el){
   const r=el.getBoundingClientRect(), pw=pop.offsetWidth, ph=pop.offsetHeight, vw=document.documentElement.clientWidth;
@@ -1638,24 +1695,32 @@ async function showWord(el){
   const word=el.textContent, cellEl=el.closest(".s"), side=cellEl.classList.contains("b")?"B":"A";
   const lang=sideLang(side), i=view.active, sentence=sideText(i,side), to=(S.settings.mtTo&&S.settings.mtTo!==lang)?S.settings.mtTo:(lang==="zh"?"en":"zh");
   const pop=document.createElement("div"); pop.className="pop"; pop.id="pop"; pop.setAttribute("role","dialog");
-  const key=(lang+":"+to+":"+word+"|"+sentence).toLowerCase();
+  const key=("v2:"+lang+":"+to+":"+word+"|"+sentence).toLowerCase();
+  const isSaved=h=>S.vocab.some(v=>v.lang===lang&&(v.text||"").toLowerCase()===(h||"").toLowerCase());
   const paint=(d,err)=>{
-    pop.innerHTML=`<div class="pw"><b>${esc(word)}</b>${d&&d.ipa?`<span class="ph">${esc(d.ipa)}</span>`:""}${d&&d.pos?`<span class="pos">${esc(d.pos)}</span>`:""}${d&&d.level?`<span class="lv ${/文学/.test(d.level)?"":"use"}">${esc(d.level)}</span>`:""}</div>
-      ${err?`<div class="pb">${esc(err)}</div>`:d?`<div class="pm">${esc(d.mean)}</div>${d.base&&d.base.toLowerCase()!==word.toLowerCase()?`<div class="pb">原形：${esc(d.base)}</div>`:""}${d.col?`<div class="pb">搭配：${esc(d.col)}</div>`:""}${d.ex?`<div class="pex"><div>${esc(d.ex)}</div>${d.exTr?`<div class="pb">${esc(d.exTr)}</div>`:""}</div>`:""}`:`<div class="pb">查询中…</div>`}
-      <div class="pa"><button class="ibtn" data-act="say">${ic("speakA")}朗读</button><button class="ibtn" data-act="save">${ic("star")}收藏</button><a href="${dictURL(word,lang)}" target="_blank" rel="noopener">查词典</a></div>`;
-    pop.querySelector('[data-act="say"]').onclick=ev=>{ev.stopPropagation();synth&&synth.cancel();utter(word,lang)};
+    const head=(d&&d.base)||word, changed=d&&d.base&&d.base.toLowerCase()!==word.toLowerCase();
+    pop.innerHTML=`<div class="pimg" id="pimg" hidden></div>
+      <div class="pw"><b>${esc(head)}</b>${d&&d.ipa?`<span class="ph">${esc(d.ipa)}</span>`:""}${d&&d.pos?`<span class="pos">${esc(d.pos)}</span>`:""}${d&&d.level?`<span class="lv ${/文学/.test(d.level)?"":"use"}">${esc(d.level)}</span>`:""}</div>
+      ${changed?`<div class="pb">文中是 <b>${esc(word)}</b>${d.form?" · "+esc(d.form):""}</div>`:""}
+      ${err?`<div class="pb">${esc(err)}</div>`:d?`<div class="pm">${esc(d.mean)}</div>${phrBlock(d.phr)}${d.col?`<div class="pcol"><span class="lab">重点搭配</span>${colChips(d.col)}</div>`:""}${d.ex?`<div class="pex"><div>${esc(d.ex)}</div>${d.exTr?`<div class="pb">${esc(d.exTr)}</div>`:""}</div>`:""}`:`<div class="pb">查询中…</div>`}
+      <div class="pa"><button class="ibtn" data-act="say">${ic("speakA")}朗读</button><button class="ibtn ${isSaved(head)?"on":""}" data-act="save">${ic("star")}${isSaved(head)?"已收藏":"收藏"}</button><a href="${dictURL(head,lang)}" target="_blank" rel="noopener">查词典</a></div>`;
+    pop.querySelector('[data-act="say"]').onclick=ev=>{ev.stopPropagation();synth&&synth.cancel();utter(head,lang)};
     pop.querySelector('[data-act="save"]').onclick=ev=>{ev.stopPropagation();
       const label=view.book.chapters.length>1?`${view.book.title} · ${chName(view.book,view.ch)}`:view.book.title;
-      const ok=addVocab({text:(d&&d.base)||word,lang,ctx:sentence,tr:sideText(i,side==="A"?"B":"A"),mean:d?[d.ipa,d.pos,d.mean].filter(Boolean).join(" "):"",ex:d?d.ex:"",exTr:d?d.exTr:"",level:d?d.level:"",col:d?d.col:"",book:label});
-      save(); toast(ok?`已收藏「${(d&&d.base)||word}」`:"生词本里已经有了")};
+      const img=(pop.querySelector("#pimg img")||{}).src||"";
+      const ok=addVocab({text:head,lang,ctx:sentence,tr:sideText(i,side==="A"?"B":"A"),mean:d?[d.ipa,d.pos,d.mean].filter(Boolean).join(" "):"",ex:d?d.ex:"",exTr:d?d.exTr:"",level:d?d.level:"",col:d?d.col:"",phr:d?d.phr:"",form:d&&changed?`${word} · ${d.form||""}`:"",img,book:label});
+      save(); toast(ok?`已收藏「${head}」`:"生词本里已经有了");
+      const b=ev.currentTarget; b.classList.add("on"); b.innerHTML=ic("star")+"已收藏"};
     placePop(pop,el);
+    if(d&&d.imgq) wordImage(d.imgq).then(u=>{const box=document.getElementById("pop")===pop&&pop.querySelector("#pimg"); if(!box||!u) return;
+      const im=new Image(); im.alt=d.imgq; im.onload=()=>{box.hidden=false; box.appendChild(im); placePop(pop,el)}; im.src=u});
   };
   document.body.appendChild(pop); paint(DICT[key]||null);
   if(DICT[key]) return;
   try{const d=await defineWord(word,sentence,lang,to); DICT[key]=d; saveDict(); if(document.getElementById("pop")===pop) paint(d)}
   catch(e){if(document.getElementById("pop")===pop) paint(null,e.message)}
 }
-document.addEventListener("click",e=>{if(!e.target.closest(".pop")&&!e.target.closest(".w")) closePop()});
+document.addEventListener("click",e=>{if(!e.target.closest(".pop")&&!e.target.closest(".w")&&!e.target.closest("#lookup")) closePop()});
 document.addEventListener("keydown",e=>{if(e.key==="Escape") closePop()});
 
 /* ---------- vocabulary ---------- */
@@ -1680,10 +1745,32 @@ function dictURL(text,lang){
   const other=lang==="ru"?"zh":"ru";
   return `https://translate.yandex.com/?source_lang=${lang}&target_lang=${other}&text=${q}`;
 }
-function lookup(){
+async function lookup(){
   const si=selInfo();
-  if(!si){toast("先长按选中一个词，再点“查词”");return}
-  const a=document.createElement("a"); a.href=dictURL(si.txt,sideLang(si.side)); a.target="_blank"; a.rel="noopener"; document.body.appendChild(a); a.click(); a.remove();
+  if(!si){toast("先长按选中一个词或短语，再点“查词”");return}
+  const sel=window.getSelection(); if(!sel.rangeCount) return;
+  const rng=sel.getRangeAt(0).cloneRange(), anchor={getBoundingClientRect:()=>rng.getBoundingClientRect()};
+  const lang=sideLang(si.side), sentence=sideText(si.i,si.side), to=(S.settings.mtTo&&S.settings.mtTo!==lang)?S.settings.mtTo:(lang==="zh"?"en":"zh");
+  const text=si.txt.replace(/\s+/g," ").slice(0,200);
+  closePop();
+  const pop=document.createElement("div"); pop.className="pop"; pop.id="pop"; pop.setAttribute("role","dialog");
+  const key=("p2:"+lang+":"+to+":"+text+"|"+sentence).toLowerCase();
+  const paint=(d,err)=>{
+    pop.innerHTML=`<div class="pw"><b style="font-size:18px">${esc(d&&d.base?d.base:text)}</b></div>
+      ${err?`<div class="pb">${esc(err)}</div>`:d?`<div class="pm">${esc(d.tr)}</div>${d.note?`<div class="pb">${esc(d.note)}</div>`:""}${d.col?`<div class="pcol"><span class="lab">重点搭配</span>${colChips(d.col)}</div>`:""}`:`<div class="pb">翻译中…</div>`}
+      <div class="pa"><button class="ibtn" data-act="say">${ic("speakA")}朗读</button><button class="ibtn" data-act="save">${ic("star")}收藏</button><a href="${dictURL(text,lang)}" target="_blank" rel="noopener">查词典</a></div>`;
+    pop.querySelector('[data-act="say"]').onclick=ev=>{ev.stopPropagation();synth&&synth.cancel();utter(text,lang)};
+    pop.querySelector('[data-act="save"]').onclick=ev=>{ev.stopPropagation();
+      const label=view.book.chapters.length>1?`${view.book.title} · ${chName(view.book,view.ch)}`:view.book.title;
+      const ok=addVocab({text:(d&&d.base)||text,lang,ctx:sentence,tr:sideText(si.i,si.side==="A"?"B":"A"),mean:d?d.tr:"",col:d?d.col:"",phr:d&&d.note?`${text}=${d.note}`:"",book:label});
+      save(); toast(ok?"已收藏":"生词本里已经有了");
+      const b=ev.currentTarget; b.classList.add("on"); b.innerHTML=ic("star")+"已收藏"};
+    placePop(pop,anchor);
+  };
+  document.body.appendChild(pop); paint(DICT[key]||null);
+  if(DICT[key]) return;
+  try{const d=await definePhrase(text,sentence,lang,to); DICT[key]=d; saveDict(); if(document.getElementById("pop")===pop) paint(d)}
+  catch(e){if(document.getElementById("pop")===pop) paint(null,e.message)}
 }
 
 /* =========================================================
@@ -1797,8 +1884,10 @@ function renderSheet(){
     el.innerHTML=`<div class="sheet">${head("生词本",S.vocab.length?`<button class="ibtn" id="copyV" title="复制全部">${ic("copy")}</button>`:"")}<div class="body">
       ${S.vocab.length?`<div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap"><button class="btn" id="vDiary">${ic("pen")}今日小日记</button><button class="btn primary" id="startRv" ${left?"":"disabled style=\"opacity:.5\""}>${left?`开始今日学习（新 ${pl.fresh.length} · 复习 ${pl.review.length}）`:"今天的任务完成了"}</button><span class="note">共 ${S.vocab.length} 个 · 已掌握 ${mastered} 个</span></div>`:""}
       ${S.vocab.length?`<div class="vocab">${S.vocab.map(v=>`<div class="vitem">
+        ${v.img?`<img class="vimg" src="${esc(v.img)}" alt="" loading="lazy" onerror="this.remove()">`:""}
         <div class="w ${cjk(v.lang)?"zh":""}" style="cursor:default">${esc(v.text)}</div>
-        ${v.kind==="idea"?`<div class="ctx">${esc(v.mean||"")}</div>`:`${v.mean?`<div class="ctx" style="color:var(--jade)">${esc(v.mean)}${v.level?` <span class="lv ${/文学/.test(v.level)?"":"use"}">${esc(v.level)}</span>`:""}</div>`:""}${v.col?`<div class="ctx"><b>搭配</b> ${esc(v.col)}</div>`:""}`}
+        ${v.form?`<div class="ctx">文中：${esc(v.form)}</div>`:""}
+        ${v.kind==="idea"?`<div class="ctx">${esc(v.mean||"")}</div>`:`${v.mean?`<div class="ctx" style="color:var(--jade)">${esc(v.mean)}${v.level?` <span class="lv ${/文学/.test(v.level)?"":"use"}">${esc(v.level)}</span>`:""}</div>`:""}${phrBlock(v.phr)}${v.col?`<div class="pcol"><span class="lab">重点搭配</span>${colChips(v.col)}</div>`:""}`}
         ${v.kind==="word"&&v.ctx?`<div class="ctx"><b>原句</b> ${esc(v.ctx)}</div>`:""}
         ${v.tr&&v.kind!=="idea"?`<div class="ctx">${v.kind==="word"?"<b>译文</b> ":""}${esc(v.tr)}</div>`:""}
         ${v.ex?`<div class="ctx"><b>例句</b> ${esc(v.ex)}${v.exTr?`<br>${esc(v.exTr)}`:""}</div>`:""}
