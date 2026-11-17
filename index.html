@@ -934,15 +934,22 @@ S.vocab.forEach(v=>{if(v.stage==null){v.stage=v.ok?2:0;v.due=v.ok?today0()+7*DAY
 /* ---------- generic call to the translation model ---------- */
 function llmReady(){return true}
 const hasLocalKey=()=>!!(S.settings.mtKey&&S.settings.mtKey.trim());
-async function llm(messages,max_tokens,temperature,provider){
-  if(!hasLocalKey()){
+async function llm(messages,max_tokens,temperature,provider,info){
+  const viaServer=async()=>{
     let r;
     try{r=await fetch("/api/llm",{method:"POST",headers:{"content-type":"application/json","x-sync-code":(typeof SYNC!=="undefined"&&SYNC.code())||"none"},body:JSON.stringify({messages,max_tokens,temperature,provider:provider||""})})}
     catch(e){throw new Error("连不上网络，联网后再试")}
     let d=null; try{d=await r.json()}catch(e){}
     if(r.status===404&&!d) throw new Error("网站的 AI 服务还没部署好");
     if(!r.ok||!d||d.error) throw new Error((d&&d.error)||("AI 服务出错（"+r.status+"）"));
+    if(info) info.provider=d.provider||"";
     return d.content||"";
+  };
+  if(!hasLocalKey()) return viaServer();
+  /* word lookup always goes through the site's server (so Claude can be used even if this device has its own key);
+     if the server is not set up, fall back to this device's own key below */
+  if(provider==="claude"){
+    try{return await viaServer()}catch(e){ if(/Claude|密钥|余额|接口地址/.test(e.message)) throw e }
   }
   const st=S.settings, base=(st.mtBase||"").trim().replace(/\/+$/,""), url=/\/chat\/completions$/.test(base)?base:base+"/chat/completions";
   let r;
@@ -950,7 +957,7 @@ async function llm(messages,max_tokens,temperature,provider){
     body:JSON.stringify({model:(st.mtModel||"deepseek-chat").trim(),messages,temperature,max_tokens,stream:false})})}
   catch(e){throw new Error("连不上翻译接口，检查网络")}
   if(!r.ok) throw new Error(r.status===401?"API Key 无效":r.status===402?"余额不足，请充值":r.status===429?"请求太频繁，稍后再试":"接口出错（"+r.status+"）");
-  const d=await r.json(); return (d&&d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content)||"";
+  const d=await r.json(); if(info) info.provider="deepseek"; return (d&&d.choices&&d.choices[0]&&d.choices[0].message&&d.choices[0].message.content)||"";
 }
 
 /* ---------- chapter key words ---------- */
@@ -1632,6 +1639,7 @@ const _none=s=>!s||/^(无|none|n\/a|-)$/i.test(s.trim())?"":s.trim();
 function _parse(text,keys){const o={},re=new RegExp("^\\s*("+keys.join("|")+")\\s*[|｜:：]\\s*(.*)$");text.split("\n").forEach(l=>{const m=l.match(re);if(m)o[m[1]]=m[2].trim()});return o}
 /* two requests run in parallel: the core entry comes back fast, the extras fill in a moment later */
 async function defineCore(word,sentence,from,to){
+  const info={};
   const toName=LANGS[to].name, fromName=LANGS[from].name;
   const sys=`You are a concise dictionary for a language learner. The learner tapped a word inside a sentence. The word may be an inflected form (past tense, plural, -ing, comparative...), but you must explain its DICTIONARY FORM (lemma), e.g. gilded -> gild (verb), children -> child (noun), better -> good. Headword, IPA and part of speech all refer to the dictionary form. Answer in ${toName} (except line 英释), exactly six lines, nothing else:
 原形|the dictionary form (lemma), always filled in, even if it equals the tapped word
@@ -1640,12 +1648,13 @@ async function defineCore(word,sentence,from,to){
 意思|meaning of the dictionary form as used in this sentence, in ${toName}, under 20 characters
 英释|one short definition of the dictionary form as used in this sentence, in simple ${fromName} like a learner's dictionary, under 15 words, without using the word itself
 词形|how the tapped word relates to the dictionary form in ${toName}, e.g. "gild 的过去分词（被动用法）"; write 原形，无变化 if it is already the dictionary form`;
-  const text=await llm([{role:"system",content:sys},{role:"user",content:`Tapped word: ${word}\nLanguage: ${fromName}\nSentence: ${sentence}`}],350,.3,"claude");
+  const text=await llm([{role:"system",content:sys},{role:"user",content:`Tapped word: ${word}\nLanguage: ${fromName}\nSentence: ${sentence}`}],350,.3,"claude",info);
   const o=_parse(text,["原形","音标","词性","意思","英释","词形"]);
   if(!o["意思"]) o["意思"]=text.trim().slice(0,60);
-  return {base:o["原形"]||"",ipa:o["音标"]||"",pos:o["词性"]||"",mean:o["意思"]||"",en:o["英释"]||"",form:o["词形"]||""};
+  return {src:info.provider||"",base:o["原形"]||"",ipa:o["音标"]||"",pos:o["词性"]||"",mean:o["意思"]||"",en:o["英释"]||"",form:o["词形"]||""};
 }
 async function defineMore(word,sentence,from,to){
+  const info={};
   const toName=LANGS[to].name, fromName=LANGS[from].name;
   const sys=`You are a concise dictionary for a language learner. The learner tapped a word inside a sentence (it may be an inflected form; work with its dictionary form). Answer in ${toName}, exactly nine lines, nothing else:
 多义|the 2–4 most common senses of the dictionary form across ALL its parts of speech (many words have several meanings or are both noun and verb), each as: part of speech + meaning in ${toName}, separated by "; ", e.g. "动词 镀金; 名词 金色涂层". Put the sense used in this sentence first
@@ -1657,23 +1666,24 @@ async function defineMore(word,sentence,from,to){
 例译|translation of that example sentence into ${toName}
 用法|exactly one of: 日常常用 / 书面正式 / 文学少见 (how often a native speaker would use this word in everyday life)
 图片|one concrete English noun or Wikipedia article title that a photo could illustrate to explain this word's meaning (for a verb or adjective, a concrete object or scene that shows it, e.g. gild -> gilding). Write 无 if no picture can show it`;
-  const text=await llm([{role:"system",content:sys},{role:"user",content:`Tapped word: ${word}\nLanguage: ${fromName}\nSentence: ${sentence}`}],1000,.5,"claude");
+  const text=await llm([{role:"system",content:sys},{role:"user",content:`Tapped word: ${word}\nLanguage: ${fromName}\nSentence: ${sentence}`}],1000,.5,"claude",info);
   const o=_parse(text,["多义","近义","反义","短语","搭配","例句","例译","用法","图片"]);
   return {senses:_none(o["多义"]),syn:_none(o["近义"]),ant:_none(o["反义"]),phr:_none(o["短语"]),col:_none(o["搭配"]),ex:o["例句"]||"",exTr:o["例译"]||"",level:o["用法"]||"",imgq:_none(o["图片"])};
 }
 
 /* ---------- phrase / sentence translation (select text → 查词) ---------- */
 async function definePhrase(text,sentence,from,to){
+  const info={};
   const toName=LANGS[to].name;
   const sys=`You are a concise dictionary for a language learner. The learner selected a phrase or passage inside a sentence. Explain it as it is used in the sentence. Answer in ${toName}, exactly four lines, nothing else:
 翻译|natural translation of the selected text into ${toName}
 说明|if it is an idiom, phrasal verb or fixed expression, say what it means and how it is used, in ${toName}, under 40 characters; otherwise write 无
 搭配|the key collocations or words inside the selected text worth remembering, each as: collocation=translation in ${toName}, separated by "; ". Write 无 if there are none
 原形|the dictionary form of the whole expression if it is a phrase (e.g. "look forward to"), otherwise 无`;
-  const t=await llm([{role:"system",content:sys},{role:"user",content:`Selected text: ${text}\nLanguage: ${LANGS[from].name}\nFull sentence: ${sentence}`}],500,.4,"claude");
+  const t=await llm([{role:"system",content:sys},{role:"user",content:`Selected text: ${text}\nLanguage: ${LANGS[from].name}\nFull sentence: ${sentence}`}],500,.4,"claude",info);
   const o={}; t.split("\n").forEach(l=>{const m=l.match(/^\s*(翻译|说明|搭配|原形)\s*[|｜:：]\s*(.*)$/);if(m)o[m[1]]=m[2].trim()});
   const none=s=>!s||/^(无|none|n\/a|-)$/i.test(s.trim())?"":s.trim();
-  return {tr:o["翻译"]||t.trim().slice(0,120),note:none(o["说明"]),col:none(o["搭配"]),base:none(o["原形"])};
+  return {src:info.provider||"",tr:o["翻译"]||t.trim().slice(0,120),note:none(o["说明"]),col:none(o["搭配"]),base:none(o["原形"])};
 }
 
 /* ---------- picture for a word (Wikipedia thumbnail, no API key) ---------- */
@@ -1722,7 +1732,7 @@ async function showWord(el){
   const word=el.textContent, cellEl=el.closest(".s"), side=cellEl.classList.contains("b")?"B":"A";
   const lang=sideLang(side), i=view.active, sentence=sideText(i,side), to=(S.settings.mtTo&&S.settings.mtTo!==lang)?S.settings.mtTo:(lang==="zh"?"en":"zh");
   const pop=document.createElement("div"); pop.className="pop"; pop.id="pop"; pop.setAttribute("role","dialog");
-  const key=("v4:"+lang+":"+to+":"+word+"|"+sentence).toLowerCase();
+  const key=("v5:"+lang+":"+to+":"+word+"|"+sentence).toLowerCase();
   const isSaved=h=>S.vocab.some(v=>v.lang===lang&&(v.text||"").toLowerCase()===(h||"").toLowerCase());
   const paint=(d,err,pend)=>{
     const head=(d&&d.base)||word, changed=d&&d.base&&d.base.toLowerCase()!==word.toLowerCase();
@@ -1730,7 +1740,7 @@ async function showWord(el){
       <div class="pw"><b>${esc(head)}</b>${d&&d.ipa?`<span class="ph">${esc(d.ipa)}</span>`:""}${d&&d.pos?`<span class="pos">${esc(d.pos)}</span>`:""}${d&&d.level?`<span class="lv ${/文学/.test(d.level)?"":"use"}">${esc(d.level)}</span>`:""}</div>
       ${changed?`<div class="pb">文中是 <b>${esc(word)}</b>${d.form?" · "+esc(d.form):""}</div>`:""}
       ${err?`<div class="pb">${esc(err)}</div>`:d?`<div class="pm">${esc(d.mean)}</div>${d.en?`<div class="pen">${esc(d.en)}</div>`:""}${pend?`<div class="pb">更多释义加载中…</div>`:""}${sensesBlock(d.senses)}${phrBlock(d.phr)}${d.col?`<div class="pcol"><span class="lab">重点搭配</span>${colChips(d.col)}</div>`:""}${relBlock(d.syn,d.ant)}${d.ex?`<div class="pex"><div>${esc(d.ex)}</div>${d.exTr?`<div class="pb">${esc(d.exTr)}</div>`:""}</div>`:""}`:`<div class="pb">查询中…</div>`}
-      <div class="pa"><button class="ibtn" data-act="say">${ic("speakA")}朗读</button><button class="ibtn ${isSaved(head)?"on":""}" data-act="save">${ic("star")}${isSaved(head)?"已收藏":"收藏"}</button><a href="${dictURL(head,lang)}" target="_blank" rel="noopener">查词典</a></div>`;
+      ${d&&d.src?`<div class="pb" style="opacity:.65;font-size:12px">查询来源：${d.src==="claude"?"Claude":"DeepSeek"}</div>`:""}<div class="pa"><button class="ibtn" data-act="say">${ic("speakA")}朗读</button><button class="ibtn ${isSaved(head)?"on":""}" data-act="save">${ic("star")}${isSaved(head)?"已收藏":"收藏"}</button><a href="${dictURL(head,lang)}" target="_blank" rel="noopener">查词典</a></div>`;
     pop.querySelector('[data-act="say"]').onclick=ev=>{ev.stopPropagation();synth&&synth.cancel();utter(head,lang)};
     pop.querySelector('[data-act="save"]').onclick=ev=>{ev.stopPropagation();
       const label=view.book.chapters.length>1?`${view.book.title} · ${chName(view.book,view.ch)}`:view.book.title;

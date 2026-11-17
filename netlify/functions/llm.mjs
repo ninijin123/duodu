@@ -39,7 +39,7 @@ export default async (req) => {
       return json({ error: msg }, 502);
     }
     const ad = await ar.json();
-    return json({ content: (ad?.content || []).filter(c => c.type === "text").map(c => c.text).join("") });
+    return json({ provider: "claude", content: (ad?.content || []).filter(c => c.type === "text").map(c => c.text).join("") });
   }
 
   const key = env("DEEPSEEK_API_KEY");
@@ -61,7 +61,7 @@ export default async (req) => {
     return json({ error: msg }, 502);
   }
   const d = await r.json();
-  return json({ content: d?.choices?.[0]?.message?.content || "" });
+  return json({ provider: "deepseek", content: d?.choices?.[0]?.message?.content || "" });
 };
 
 export const config = { path: "/api/llm" };
