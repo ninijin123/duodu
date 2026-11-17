@@ -1,0 +1,5 @@
+上传说明
+1. 打开 github.com/ninijin123/duodu → Add file → Upload files
+2. 把本文件夹里的 index.html、sw.js 和 netlify 文件夹一起拖进去(这个说明文件不用传)
+3. 点 Commit changes,只提交一次
+4. 部署完成后刷新,查一个没查过的词

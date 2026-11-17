@@ -927,6 +927,8 @@ function addVocab(item){
   S.vocab.unshift({id:Date.now().toString(36)+Math.random().toString(36).slice(2,5),kind:"word",t:Date.now(),u:Date.now(),stage:0,due:0,...item});
   return true;
 }
+function savedWord(lang,text){const k=(text||"").toLowerCase();return S.vocab.some(v=>v.lang===lang&&(v.text||"").toLowerCase()===k)}
+function removeVocab(lang,text){const k=(text||"").toLowerCase();const gone=S.vocab.filter(v=>v.lang===lang&&(v.text||"").toLowerCase()===k);if(!gone.length)return false;S.vocabDel=(S.vocabDel||[]).concat(gone.map(v=>({id:v.id,t:Date.now()})));S.vocab=S.vocab.filter(v=>!gone.includes(v));return true}
 S.vocab.forEach(v=>{if(v.seen==null) v.seen=(v.stage||0)>0||v.kind==="idea"||!!v.ok});
 // migrate items saved before spaced repetition existed
 S.vocab.forEach(v=>{if(v.stage==null){v.stage=v.ok?2:0;v.due=v.ok?today0()+7*DAY:0;delete v.ok}});
@@ -1745,6 +1747,7 @@ async function showWord(el){
     pop.querySelector('[data-act="save"]').onclick=ev=>{ev.stopPropagation();
       const label=view.book.chapters.length>1?`${view.book.title} · ${chName(view.book,view.ch)}`:view.book.title;
       const img=(pop.querySelector("#pimg img")||{}).src||"";
+      if(isSaved(head)){removeVocab(lang,head);save();toast(`已取消收藏「${head}」`);const b0=ev.currentTarget;b0.classList.remove("on");b0.innerHTML=ic("star")+"收藏";return}
       const ok=addVocab({text:head,lang,ctx:sentence,tr:sideText(i,side==="A"?"B":"A"),mean:d?[d.ipa,d.pos,d.mean].filter(Boolean).join(" "):"",ex:d?d.ex:"",exTr:d?d.exTr:"",level:d?d.level:"",col:d?d.col:"",phr:d?d.phr:"",en:d?d.en:"",senses:d?d.senses:"",syn:d?d.syn:"",ant:d?d.ant:"",form:d&&changed?`${word} · ${d.form||""}`:"",img,book:label});
       save(); toast(ok?`已收藏「${head}」`:"生词本里已经有了");
       const b=ev.currentTarget; b.classList.add("on"); b.innerHTML=ic("star")+"已收藏"};
@@ -1800,10 +1803,12 @@ async function lookup(){
   const paint=(d,err)=>{
     pop.innerHTML=`<div class="pw"><b style="font-size:18px">${esc(d&&d.base?d.base:text)}</b></div>
       ${err?`<div class="pb">${esc(err)}</div>`:d?`<div class="pm">${esc(d.tr)}</div>${d.note?`<div class="pb">${esc(d.note)}</div>`:""}${d.col?`<div class="pcol"><span class="lab">重点搭配</span>${colChips(d.col)}</div>`:""}`:`<div class="pb">翻译中…</div>`}
-      <div class="pa"><button class="ibtn" data-act="say">${ic("speakA")}朗读</button><button class="ibtn" data-act="save">${ic("star")}收藏</button><a href="${dictURL(text,lang)}" target="_blank" rel="noopener">查词典</a></div>`;
+      <div class="pa"><button class="ibtn" data-act="say">${ic("speakA")}朗读</button><button class="ibtn ${savedWord(lang,(d&&d.base)||text)?"on":""}" data-act="save">${ic("star")}${savedWord(lang,(d&&d.base)||text)?"已收藏":"收藏"}</button><a href="${dictURL(text,lang)}" target="_blank" rel="noopener">查词典</a></div>`;
     pop.querySelector('[data-act="say"]').onclick=ev=>{ev.stopPropagation();synth&&synth.cancel();utter(text,lang)};
     pop.querySelector('[data-act="save"]').onclick=ev=>{ev.stopPropagation();
       const label=view.book.chapters.length>1?`${view.book.title} · ${chName(view.book,view.ch)}`:view.book.title;
+      const hk=(d&&d.base)||text;
+      if(savedWord(lang,hk)){removeVocab(lang,hk);save();toast("已取消收藏");const b0=ev.currentTarget;b0.classList.remove("on");b0.innerHTML=ic("star")+"收藏";return}
       const ok=addVocab({text:(d&&d.base)||text,lang,ctx:sentence,tr:sideText(si.i,si.side==="A"?"B":"A"),mean:d?d.tr:"",col:d?d.col:"",phr:d&&d.note?`${text}=${d.note}`:"",book:label});
       save(); toast(ok?"已收藏":"生词本里已经有了");
       const b=ev.currentTarget; b.classList.add("on"); b.innerHTML=ic("star")+"已收藏"};

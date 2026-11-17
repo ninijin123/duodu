@@ -5,7 +5,7 @@
 //   DEEPSEEK_MODEL    (optional, default deepseek-chat)
 // Word lookup can use Claude instead (the app sends provider:"claude"). If ANTHROPIC_API_KEY is not set, it falls back to DeepSeek.
 //   ANTHROPIC_API_KEY  (optional) key from console.anthropic.com
-//   ANTHROPIC_MODEL    (optional, default claude-haiku-5-5)
+//   ANTHROPIC_MODEL    (optional, default claude-haiku-5-5). Claude 5.x models reject a custom temperature, so none is sent.
 //   ANTHROPIC_BASE_URL (optional, default https://api.anthropic.com; set to your relay's address)
 //   ANTHROPIC_FORMAT   (optional, set to "openai" if the relay only supports the OpenAI /chat/completions format)
 const env = k => (globalThis.Netlify?.env?.get?.(k)) ?? process.env[k];
@@ -28,7 +28,7 @@ export default async (req) => {
       let orr;
       try {
         orr = await fetch(ourl, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${akey}` },
-          body: JSON.stringify({ model: env("ANTHROPIC_MODEL") || "claude-haiku-5-5", messages, max_tokens: Math.min(+max_tokens || 1000, 8000), temperature: Math.max(0, Math.min(+temperature || 0, 1)), stream: false }) });
+          body: JSON.stringify({ model: env("ANTHROPIC_MODEL") || "claude-haiku-5-5", messages, max_tokens: Math.min(+max_tokens || 1000, 8000), stream: false }) });
       } catch { return json({ error: "服务器连不上 Claude 中转接口，检查 ANTHROPIC_BASE_URL" }, 502); }
       if (!orr.ok) {
         const t = await orr.text().catch(() => "");
@@ -49,8 +49,8 @@ export default async (req) => {
     const aurl = /\/messages$/.test(abase) ? abase : /\/v1$/.test(abase) ? abase + "/messages" : abase + "/v1/messages";
     let ar;
     try {
-      ar = await fetch(aurl, { method: "POST", headers: { "content-type": "application/json", "x-api-key": akey, "anthropic-version": "2023-06-01" },
-        body: JSON.stringify({ model: env("ANTHROPIC_MODEL") || "claude-haiku-5-5", max_tokens: Math.min(+max_tokens || 1000, 8000), temperature: Math.max(0, Math.min(+temperature || 0, 1)), ...(sys ? { system: sys } : {}), messages: msgs }) });
+      ar = await fetch(aurl, { method: "POST", headers: { "content-type": "application/json", "x-api-key": akey, "anthropic-version": "2023-06-01", ...(env("ANTHROPIC_BASE_URL") ? { authorization: `Bearer ${akey}` } : {}) },
+        body: JSON.stringify({ model: env("ANTHROPIC_MODEL") || "claude-haiku-5-5", max_tokens: Math.min(+max_tokens || 1000, 8000), ...(sys ? { system: sys } : {}), messages: msgs }) });
     } catch { return json({ error: "服务器连不上 Claude 接口，稍后再试" }, 502); }
     if (!ar.ok) {
       const t = await ar.text().catch(() => "");
