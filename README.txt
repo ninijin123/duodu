@@ -18,3 +18,11 @@
 
 【多设备同步】需要通过 GitHub 部署（拖拽上传不支持同步）。
 在“阅读设置 → 多设备同步”里，第一台设备点“开启同步”，其他设备输入同一个同步码。
+
+【查词用 Claude（可选）】
+整章翻译仍然用 DeepSeek。点词、选中短语查词可以改用 Claude：
+1. console.anthropic.com 注册并充值，创建 API Key。
+2. Netlify → Environment variables 新增：
+   ANTHROPIC_API_KEY = 你的密钥
+   ANTHROPIC_MODEL   = 想用的模型名（不填默认 claude-haiku-5-5）
+3. 重新部署。没填 ANTHROPIC_API_KEY 时，查词会自动继续用 DeepSeek。
