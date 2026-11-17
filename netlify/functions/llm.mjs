@@ -6,7 +6,8 @@
 // Word lookup can use Claude instead (the app sends provider:"claude"). If ANTHROPIC_API_KEY is not set, it falls back to DeepSeek.
 //   ANTHROPIC_API_KEY  (optional) key from console.anthropic.com
 //   ANTHROPIC_MODEL    (optional, default claude-haiku-5-5)
-//   ANTHROPIC_BASE_URL (optional, default https://api.anthropic.com)
+//   ANTHROPIC_BASE_URL (optional, default https://api.anthropic.com; set to your relay's address)
+//   ANTHROPIC_FORMAT   (optional, set to "openai" if the relay only supports the OpenAI /chat/completions format)
 const env = k => (globalThis.Netlify?.env?.get?.(k)) ?? process.env[k];
 const json = (obj, status = 200) => new Response(JSON.stringify(obj), { status, headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" } });
 
@@ -19,11 +20,33 @@ export default async (req) => {
 
   const akey = env("ANTHROPIC_API_KEY");
   if (provider === "claude" && akey) {
+    if ((env("ANTHROPIC_FORMAT") || "").toLowerCase() === "openai") {
+      // Relay that only speaks the OpenAI chat format: ANTHROPIC_BASE_URL = its address, ANTHROPIC_MODEL = its model name
+      const ob = (env("ANTHROPIC_BASE_URL") || "").trim().replace(/\/+$/, "");
+      if (!ob) return json({ error: "用 OpenAI 格式时，必须在 Netlify 设置 ANTHROPIC_BASE_URL" }, 500);
+      const ourl = /\/chat\/completions$/.test(ob) ? ob : ob + "/chat/completions";
+      let orr;
+      try {
+        orr = await fetch(ourl, { method: "POST", headers: { "content-type": "application/json", authorization: `Bearer ${akey}` },
+          body: JSON.stringify({ model: env("ANTHROPIC_MODEL") || "claude-haiku-5-5", messages, max_tokens: Math.min(+max_tokens || 1000, 8000), temperature: Math.max(0, Math.min(+temperature || 0, 1)), stream: false }) });
+      } catch { return json({ error: "服务器连不上 Claude 中转接口，检查 ANTHROPIC_BASE_URL" }, 502); }
+      if (!orr.ok) {
+        const t = await orr.text().catch(() => "");
+        const msg = orr.status === 401 ? "Claude 密钥无效，请检查 Netlify 里的 ANTHROPIC_API_KEY"
+          : orr.status === 402 || /quota|credit|balance/i.test(t) ? "Claude 账户余额不足，请充值"
+          : orr.status === 404 ? "Claude 接口地址或模型名称不对，检查 ANTHROPIC_BASE_URL 和 ANTHROPIC_MODEL"
+          : orr.status === 429 ? "请求太频繁，稍等一会再试"
+          : `Claude 接口返回错误 ${orr.status}：${t.slice(0, 160)}`;
+        return json({ error: msg }, 502);
+      }
+      const od = await orr.json();
+      return json({ provider: "claude", content: od?.choices?.[0]?.message?.content || "" });
+    }
     const sys = messages.filter(m => m.role === "system").map(m => m.content).join("\n\n");
     const msgs = messages.filter(m => m.role !== "system").map(m => ({ role: m.role === "assistant" ? "assistant" : "user", content: String(m.content) }));
     if (!msgs.length) return json({ error: "内容格式不对" }, 400);
     const abase = (env("ANTHROPIC_BASE_URL") || "https://api.anthropic.com").trim().replace(/\/+$/, "");
-    const aurl = /\/messages$/.test(abase) ? abase : abase + "/v1/messages";
+    const aurl = /\/messages$/.test(abase) ? abase : /\/v1$/.test(abase) ? abase + "/messages" : abase + "/v1/messages";
     let ar;
     try {
       ar = await fetch(aurl, { method: "POST", headers: { "content-type": "application/json", "x-api-key": akey, "anthropic-version": "2023-06-01" },

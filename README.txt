@@ -26,3 +26,7 @@
    ANTHROPIC_API_KEY = 你的密钥
    ANTHROPIC_MODEL   = 想用的模型名（不填默认 claude-haiku-5-5）
 3. 重新部署。没填 ANTHROPIC_API_KEY 时，查词会自动继续用 DeepSeek。
+
+【Claude 来自淘宝中转时】
+再加：ANTHROPIC_BASE_URL = 卖家给的接口地址
+如果卖家说只支持 OpenAI 格式：再加 ANTHROPIC_FORMAT = openai，并把 ANTHROPIC_MODEL 设成卖家给的模型名。
